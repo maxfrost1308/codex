@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duplex Offset Calibrator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --accent-hover: #ff6b81;
+    --text: #eee;
+    --text-dim: #aaa;
+    --border: #2a2a4a;
+    --success: #2ecc71;
+    --warning: #f39c12;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  header p { color: var(--text-dim); margin-top: 4px; font-size: 14px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .tab:hover:not(.active) {
+    background: rgba(233, 69, 96, 0.1);
+    color: var(--text);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Shared styles */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .panel h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .field {
+    margin-bottom: 14px;
+  }
+
+  .field:last-child { margin-bottom: 0; }
+
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  select, input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  .row { display: flex; gap: 12px; }
+  .row .field { flex: 1; }
+
+  .hidden { display: none !important; }
+
+  /* Step indicator */
+  .steps {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .step {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .step.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .step.done {
+    border-color: var(--success);
+    color: var(--success);
+  }
+
+  /* Help diagram */
+  .help-diagram {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--text-dim);
+  }
+
+  .help-diagram .highlight { color: var(--accent); font-weight: bold; }
+  .help-diagram .dim { color: #555; }
+  .help-diagram .pos { color: var(--success); }
+  .help-diagram .neg { color: var(--warning); }
+
+  /* Measurement inputs */
+  .corner-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .corner-input h4 {
+    font-size: 13px;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .corner-input .row { margin-bottom: 0; }
+
+  /* Preset chips */
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .preset-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .preset-chip:hover { border-color: var(--accent); }
+
+  .preset-chip.active {
+    border-color: var(--accent);
+    background: rgba(233, 69, 96, 0.15);
+    color: var(--accent);
+  }
+
+  .preset-chip .delete {
+    font-size: 14px;
+    color: var(--text-dim);
+    cursor: pointer;
+    margin-left: 2px;
+  }
+
+  .preset-chip .delete:hover { color: var(--accent); }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(233, 69, 96, 0.05);
+  }
+
+  .dropzone-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.6; }
+  .dropzone-text { font-size: 15px; color: var(--text-dim); }
+  .dropzone-text strong { color: var(--accent); }
+
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+
+  .file-info .icon { font-size: 22px; }
+  .file-info .details { flex: 1; }
+  .file-info .name { font-weight: 600; font-size: 14px; }
+  .file-info .meta { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+
+  .file-info .remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+
+  .file-info .remove-btn:hover { color: var(--accent); }
+
+  /* Progress */
+  .progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 12px;
+  }
+
+  .progress-bar .fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.2s;
+  }
+
+  .status-text {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    text-align: center;
+  }
+
+  .status-text.done { color: var(--success); }
+  .status-text.error { color: var(--accent); }
+
+  .summary {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+
+  .summary strong { color: var(--text); }
+
+  .info-box {
+    background: rgba(233, 69, 96, 0.08);
+    border: 1px solid rgba(233, 69, 96, 0.2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .info-box strong { color: var(--text); }
+
+  @media (max-width: 640px) {
+    .row { flex-direction: column; gap: 8px; }
+    .steps { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Duplex Offset Calibrator</h1>
+    <p>Calibrate and correct front/back alignment for double-sided printing.</p>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="calibrate">1. Calibrate</button>
+    <button class="tab" data-tab="apply">2. Apply Offset</button>
+  </div>
+
+  <!-- ==================== TAB 1: CALIBRATE ==================== -->
+  <div id="tab-calibrate" class="tab-content active">
+
+    <div class="steps">
+      <div class="step active" id="step1-ind">Print Template</div>
+      <div class="step" id="step2-ind">Measure</div>
+      <div class="step" id="step3-ind">Save Preset</div>
+    </div>
+
+    <!-- Step 1: Generate & print template -->
+    <div id="step1" class="panel">
+      <h3>Step 1 — Print Calibration Template</h3>
+      <p style="font-size: 14px; color: var(--text-dim); margin-bottom: 14px;">
+        This generates an A4 PDF with alignment crosses at the top-left and bottom-right corners
+        (10mm from edges), printed on both front and back. Print it <strong>duplex, at 100% scale
+        (no fit-to-page)</strong>, then measure the offset between front and back crosses.
+      </p>
+      <button class="btn btn-primary" id="genTemplateBtn">Download Calibration Template</button>
+    </div>
+
+    <!-- Step 2: Enter measurements -->
+    <div id="step2" class="panel">
+      <h3>Step 2 — Enter Measurements</h3>
+
+      <div class="info-box">
+        <strong>How to measure:</strong> Hold the printed sheet up to light so you can see both
+        front and back crosses overlaid. Measure how far the <strong>back cross has shifted</strong>
+        relative to the front cross at each corner. The sign convention is printed on the template itself.
+      </div>
+
+      <div class="corner-input">
+        <h4>Top-Left Corner</h4>
+        <div class="row">
+          <div class="field">
+            <label>X offset (mm) — positive = back shifted right</label>
+            <input type="number" id="tl_x" value="0" step="0.1">
+          </div>
+          <div class="field">
+            <label>Y offset (mm) — positive = back shifted up</label>
+            <input type="number" id="tl_y" value="0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="corner-input">
+        <h4>Bottom-Right Corner</h4>
+        <div class="row">
+          <div class="field">
+            <label>X offset (mm) — positive = back shifted right</label>
+            <input type="number" id="br_x" value="0" step="0.1">
+          </div>
+          <div class="field">
+            <label>Y offset (mm) — positive = back shifted up</label>
+            <input type="number" id="br_y" value="0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div id="computedSummary" class="summary"></div>
+    </div>
+
+    <!-- Step 3: Save preset -->
+    <div id="step3" class="panel">
+      <h3>Step 3 — Save as Preset</h3>
+      <div class="row">
+        <div class="field">
+          <label>Preset name (e.g. paper stock or printer name)</label>
+          <input type="text" id="presetName" placeholder="e.g. VMS 220gsm Matte">
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <button class="btn btn-primary" id="savePresetBtn">Save Preset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 2: APPLY OFFSET ==================== -->
+  <div id="tab-apply" class="tab-content">
+
+    <!-- Preset selection -->
+    <div class="panel">
+      <h3>Select Calibration Preset</h3>
+      <div class="presets" id="presetList">
+        <span style="color: var(--text-dim); font-size: 13px;">No presets saved yet. Calibrate first.</span>
+      </div>
+      <div id="activePresetSummary" class="summary hidden"></div>
+    </div>
+
+    <!-- Or manual entry -->
+    <div class="panel">
+      <h3>Or Enter Offsets Manually</h3>
+      <div class="corner-input">
+        <h4>Top-Left Corner</h4>
+        <div class="row">
+          <div class="field">
+            <label>X offset (mm)</label>
+            <input type="number" id="apply_tl_x" value="0" step="0.1">
+          </div>
+          <div class="field">
+            <label>Y offset (mm)</label>
+            <input type="number" id="apply_tl_y" value="0" step="0.1">
+          </div>
+        </div>
+      </div>
+      <div class="corner-input">
+        <h4>Bottom-Right Corner</h4>
+        <div class="row">
+          <div class="field">
+            <label>X offset (mm)</label>
+            <input type="number" id="apply_br_x" value="0" step="0.1">
+          </div>
+          <div class="field">
+            <label>Y offset (mm)</label>
+            <input type="number" id="apply_br_y" value="0" step="0.1">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drop zone for PDF -->
+    <div id="applyDropzone" class="dropzone">
+      <div class="dropzone-icon">📄</div>
+      <div class="dropzone-text">Drag & drop a PDF to apply offset, or <strong>click to browse</strong></div>
+      <input type="file" id="applyFileInput" accept=".pdf">
+    </div>
+
+    <div id="applyFileInfo" class="file-info hidden">
+      <span class="icon">📄</span>
+      <div class="details">
+        <div class="name" id="applyFileName"></div>
+        <div class="meta" id="applyFileMeta"></div>
+      </div>
+      <button class="remove-btn" id="applyRemoveFile" title="Remove file">✕</button>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <button class="btn btn-primary" id="applyBtn" disabled>Apply Offset & Download</button>
+    </div>
+
+    <div id="applyProgress" class="hidden">
+      <div class="progress-bar"><div class="fill" id="applyProgressFill" style="width: 0%"></div></div>
+      <div class="status-text" id="applyStatusText">Preparing...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
+
+const MM_TO_PT = 72 / 25.4;
+
+// A4 in points
+const A4_W = 595.28;
+const A4_H = 841.89;
+
+// Cross position: 10mm from edges
+const CROSS_INSET = 10 * MM_TO_PT;
+const CROSS_SIZE = 8 * MM_TO_PT;
+const CROSS_LINE_W = 0.5;
+
+// ==================== TABS ====================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Help diagram removed — sign convention is now printed on the template itself.
+
+// ==================== STEP INDICATORS ====================
+function setStep(n) {
+  ['step1-ind', 'step2-ind', 'step3-ind'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active', 'done');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+  });
+}
+
+// ==================== TEMPLATE GENERATION ====================
+document.getElementById('genTemplateBtn').addEventListener('click', generateTemplate);
+
+async function generateTemplate() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  // Cross positions (center of cross) — bottom-left origin
+  const tlX = CROSS_INSET;
+  const tlY = A4_H - CROSS_INSET;
+  const brX = A4_W - CROSS_INSET;
+  const brY = CROSS_INSET;
+
+  // --- FRONT PAGE ---
+  const frontPage = pdf.addPage([A4_W, A4_H]);
+  drawCross(frontPage, tlX, tlY);
+  drawCross(frontPage, brX, brY);
+
+  const frontText = 'FRONT';
+  const ftw = font.widthOfTextAtSize(frontText, 48);
+  frontPage.drawText(frontText, {
+    x: (A4_W - ftw) / 2,
+    y: A4_H / 2 + 20,
+    size: 48, font,
+    color: rgb(0.8, 0.8, 0.8),
+  });
+
+  const instrLines = [
+    'Print this page DUPLEX at 100% scale.',
+    'Do NOT use "fit to page" or "shrink to fit".',
+    'Hold up to light and measure back cross offset from front cross.',
+  ];
+  instrLines.forEach((line, i) => {
+    const lw = font.widthOfTextAtSize(line, 10);
+    frontPage.drawText(line, {
+      x: (A4_W - lw) / 2,
+      y: A4_H / 2 - 20 - i * 16,
+      size: 10, font,
+      color: rgb(0.6, 0.6, 0.6),
+    });
+  });
+
+  frontPage.drawText('TL', { x: tlX + CROSS_SIZE + 4, y: tlY - 5, size: 8, font, color: rgb(0, 0, 0) });
+  frontPage.drawText('BR', { x: brX - CROSS_SIZE - 18, y: brY - 5, size: 8, font, color: rgb(0, 0, 0) });
+
+  // Sign convention annotations near TL cross
+  const labelFont = await pdf.embedFont(StandardFonts.Helvetica);
+  const gray = rgb(0.45, 0.45, 0.45);
+  const labelSize = 7;
+
+  // TL corner: labels and arrow lines
+  // Draw small arrow lines from the cross to indicate axis directions
+  const arrowGray = rgb(0.45, 0.45, 0.45);
+  const arrowLen = 18;
+  const arrowOff = CROSS_SIZE + 4; // start arrows past the cross arms
+
+  // TL: X axis arrow line and labels
+  frontPage.drawLine({ start: { x: tlX - arrowOff - arrowLen, y: tlY }, end: { x: tlX - arrowOff, y: tlY }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('<-- -X', { x: tlX - arrowOff - arrowLen - 2, y: tlY - 10, size: labelSize, font: labelFont, color: gray });
+  frontPage.drawLine({ start: { x: tlX + arrowOff, y: tlY }, end: { x: tlX + arrowOff + arrowLen, y: tlY }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('+X -->', { x: tlX + arrowOff + 2, y: tlY - 10, size: labelSize, font: labelFont, color: gray });
+  // TL: Y axis arrow line and labels
+  frontPage.drawLine({ start: { x: tlX, y: tlY + arrowOff }, end: { x: tlX, y: tlY + arrowOff + arrowLen }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('+Y', { x: tlX + 4, y: tlY + arrowOff + arrowLen - 2, size: labelSize, font: labelFont, color: gray });
+  frontPage.drawLine({ start: { x: tlX, y: tlY - arrowOff - arrowLen }, end: { x: tlX, y: tlY - arrowOff }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('-Y', { x: tlX + 4, y: tlY - arrowOff - arrowLen - 2, size: labelSize, font: labelFont, color: gray });
+
+  // BR corner: same convention
+  frontPage.drawLine({ start: { x: brX - arrowOff - arrowLen, y: brY }, end: { x: brX - arrowOff, y: brY }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('<-- -X', { x: brX - arrowOff - arrowLen - 2, y: brY - 10, size: labelSize, font: labelFont, color: gray });
+  frontPage.drawLine({ start: { x: brX + arrowOff, y: brY }, end: { x: brX + arrowOff + arrowLen, y: brY }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('+X -->', { x: brX + arrowOff + 2, y: brY - 10, size: labelSize, font: labelFont, color: gray });
+  frontPage.drawLine({ start: { x: brX, y: brY + arrowOff }, end: { x: brX, y: brY + arrowOff + arrowLen }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('+Y', { x: brX + 4, y: brY + arrowOff + arrowLen - 2, size: labelSize, font: labelFont, color: gray });
+  frontPage.drawLine({ start: { x: brX, y: brY - arrowOff - arrowLen }, end: { x: brX, y: brY - arrowOff }, thickness: 0.4, color: arrowGray });
+  frontPage.drawText('-Y', { x: brX + 4, y: brY - arrowOff - arrowLen - 2, size: labelSize, font: labelFont, color: gray });
+
+  // Explanation text near bottom center of front page
+  const explLines = [
+    'Measure how far the BACK cross shifted relative to the FRONT cross.',
+    '+X = back shifted right      -X = back shifted left',
+    '+Y = back shifted up         -Y = back shifted down',
+  ];
+  explLines.forEach((line, i) => {
+    const lw = labelFont.widthOfTextAtSize(line, 8);
+    frontPage.drawText(line, {
+      x: (A4_W - lw) / 2,
+      y: 60 - i * 12,
+      size: 8, font: labelFont, color: gray,
+    });
+  });
+
+  // --- BACK PAGE ---
+  // When the printer duplexes (long-edge flip), the back page is mirrored horizontally.
+  // So we place back crosses at mirrored-X positions so they align with front crosses when held to light.
+  const backPage = pdf.addPage([A4_W, A4_H]);
+
+  const backTlX = A4_W - CROSS_INSET;  // mirrors to front TL when flipped
+  const backTlY = A4_H - CROSS_INSET;
+  const backBrX = CROSS_INSET;          // mirrors to front BR when flipped
+  const backBrY = CROSS_INSET;
+
+  drawCross(backPage, backTlX, backTlY);
+  drawCross(backPage, backBrX, backBrY);
+
+  const backText = 'BACK';
+  const btw = font.widthOfTextAtSize(backText, 48);
+  backPage.drawText(backText, {
+    x: (A4_W - btw) / 2,
+    y: A4_H / 2 + 20,
+    size: 48, font,
+    color: rgb(0.8, 0.8, 0.8),
+  });
+
+  backPage.drawText('TL', { x: backTlX - CROSS_SIZE - 18, y: backTlY - 5, size: 8, font, color: rgb(0, 0, 0) });
+  backPage.drawText('BR', { x: backBrX + CROSS_SIZE + 4, y: backBrY - 5, size: 8, font, color: rgb(0, 0, 0) });
+
+  const pdfBytes = await pdf.save();
+  downloadBlob(pdfBytes, 'Duplex Calibration Template.pdf', 'application/pdf');
+  setStep(2);
+}
+
+function drawCross(page, cx, cy) {
+  page.drawLine({
+    start: { x: cx - CROSS_SIZE, y: cy },
+    end:   { x: cx + CROSS_SIZE, y: cy },
+    thickness: CROSS_LINE_W, color: rgb(0, 0, 0),
+  });
+  page.drawLine({
+    start: { x: cx, y: cy - CROSS_SIZE },
+    end:   { x: cx, y: cy + CROSS_SIZE },
+    thickness: CROSS_LINE_W, color: rgb(0, 0, 0),
+  });
+  // Small circle at center
+  const r = 1.5;
+  const steps = 24;
+  for (let i = 0; i < steps; i++) {
+    const a1 = (2 * Math.PI * i) / steps;
+    const a2 = (2 * Math.PI * (i + 1)) / steps;
+    page.drawLine({
+      start: { x: cx + r * Math.cos(a1), y: cy + r * Math.sin(a1) },
+      end:   { x: cx + r * Math.cos(a2), y: cy + r * Math.sin(a2) },
+      thickness: CROSS_LINE_W, color: rgb(0, 0, 0),
+    });
+  }
+}
+
+// ==================== MEASUREMENT -> TRANSFORM ====================
+['tl_x', 'tl_y', 'br_x', 'br_y'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateComputed);
+});
+
+function getMeasurements(prefix) {
+  return {
+    tlX: parseFloat(document.getElementById(prefix + 'tl_x').value) || 0,
+    tlY: parseFloat(document.getElementById(prefix + 'tl_y').value) || 0,
+    brX: parseFloat(document.getElementById(prefix + 'br_x').value) || 0,
+    brY: parseFloat(document.getElementById(prefix + 'br_y').value) || 0,
+  };
+}
+
+function computeTransform(m) {
+  // Two corner measurements give rotation + translation.
+  // Cross positions on front page (mm, bottom-left origin):
+  const tlFront = { x: 10, y: 297 - 10 };  // A4: 210x297mm
+  const brFront = { x: 210 - 10, y: 10 };
+
+  // Where back crosses actually landed (as seen from front):
+  const tlBack = { x: tlFront.x + m.tlX, y: tlFront.y + m.tlY };
+  const brBack = { x: brFront.x + m.brX, y: brFront.y + m.brY };
+
+  // Vector between front corners:
+  const dxF = brFront.x - tlFront.x;
+  const dyF = brFront.y - tlFront.y;
+
+  // Vector between back corners:
+  const dxB = brBack.x - tlBack.x;
+  const dyB = brBack.y - tlBack.y;
+
+  // Rotation angle:
+  const angleF = Math.atan2(dyF, dxF);
+  const angleB = Math.atan2(dyB, dxB);
+  const rotationRad = angleB - angleF;
+  const rotationDeg = rotationRad * 180 / Math.PI;
+
+  // Average translation:
+  const avgTx = (m.tlX + m.brX) / 2;
+  const avgTy = (m.tlY + m.brY) / 2;
+
+  return {
+    rotationDeg, rotationRad,
+    txMm: avgTx, tyMm: avgTy,
+    txPt: avgTx * MM_TO_PT, tyPt: avgTy * MM_TO_PT,
+  };
+}
+
+function updateComputed() {
+  const m = getMeasurements('');
+  const t = computeTransform(m);
+  const el = document.getElementById('computedSummary');
+
+  const rotDir = t.rotationDeg > 0 ? 'counterclockwise' : t.rotationDeg < 0 ? 'clockwise' : 'none';
+  const xDir = t.txMm > 0 ? 'rightward' : t.txMm < 0 ? 'leftward' : 'none';
+  const yDir = t.tyMm > 0 ? 'upward' : t.tyMm < 0 ? 'downward' : 'none';
+
+  el.innerHTML = `
+    <strong>Computed correction (will be applied to odd/front pages):</strong><br>
+    Rotation: <strong>${Math.abs(t.rotationDeg).toFixed(4)}\u00b0</strong> ${rotDir}<br>
+    X shift: <strong>${Math.abs(t.txMm).toFixed(2)} mm</strong> ${xDir} (${Math.abs(t.txPt).toFixed(2)} pt)<br>
+    Y shift: <strong>${Math.abs(t.tyMm).toFixed(2)} mm</strong> ${yDir} (${Math.abs(t.tyPt).toFixed(2)} pt)
+  `;
+
+  setStep(3);
+}
+
+// ==================== PRESETS (localStorage + cookie fallback) ====================
+function getPresets() {
+  try {
+    const raw = localStorage.getItem('duplexOffsetPresets');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function savePresetsStorage(presets) {
+  localStorage.setItem('duplexOffsetPresets', JSON.stringify(presets));
+}
+
+function getPresetsCookie() {
+  try {
+    const match = document.cookie.match(/duplexPresets=([^;]+)/);
+    if (match) return JSON.parse(decodeURIComponent(match[1]));
+  } catch {}
+  return null;
+}
+
+function savePresetsCookie(presets) {
+  const val = encodeURIComponent(JSON.stringify(presets));
+  document.cookie = `duplexPresets=${val};max-age=31536000;path=/;SameSite=Lax`;
+}
+
+function loadAllPresets() {
+  let presets = getPresets();
+  if (!presets.length) {
+    presets = getPresetsCookie() || [];
+    if (presets.length) savePresetsStorage(presets);
+  }
+  return presets;
+}
+
+function persistPresets(presets) {
+  savePresetsStorage(presets);
+  savePresetsCookie(presets);
+}
+
+document.getElementById('savePresetBtn').addEventListener('click', () => {
+  const name = document.getElementById('presetName').value.trim();
+  if (!name) { alert('Enter a preset name.'); return; }
+
+  const m = getMeasurements('');
+  const presets = loadAllPresets();
+
+  const idx = presets.findIndex(p => p.name === name);
+  const preset = { name, tlX: m.tlX, tlY: m.tlY, brX: m.brX, brY: m.brY, date: new Date().toISOString() };
+  if (idx >= 0) presets[idx] = preset;
+  else presets.push(preset);
+
+  persistPresets(presets);
+  renderPresets();
+  document.getElementById('presetName').value = '';
+  alert(`Preset "${name}" saved!`);
+});
+
+let activePresetName = null;
+
+function renderPresets() {
+  const presets = loadAllPresets();
+  const container = document.getElementById('presetList');
+
+  if (!presets.length) {
+    container.innerHTML = '<span style="color: var(--text-dim); font-size: 13px;">No presets saved yet. Calibrate first.</span>';
+    return;
+  }
+
+  container.innerHTML = '';
+  presets.forEach(p => {
+    const chip = document.createElement('div');
+    chip.className = 'preset-chip' + (activePresetName === p.name ? ' active' : '');
+    chip.innerHTML = `<span>${p.name}</span><span class="delete" title="Delete preset">\u2715</span>`;
+
+    chip.querySelector('.delete').addEventListener('click', e => {
+      e.stopPropagation();
+      if (confirm(`Delete preset "${p.name}"?`)) {
+        const ps = loadAllPresets().filter(x => x.name !== p.name);
+        persistPresets(ps);
+        if (activePresetName === p.name) activePresetName = null;
+        renderPresets();
+      }
+    });
+
+    chip.addEventListener('click', () => {
+      activePresetName = p.name;
+      document.getElementById('apply_tl_x').value = p.tlX;
+      document.getElementById('apply_tl_y').value = p.tlY;
+      document.getElementById('apply_br_x').value = p.brX;
+      document.getElementById('apply_br_y').value = p.brY;
+      renderPresets();
+
+      const t = computeTransform(p);
+      const summary = document.getElementById('activePresetSummary');
+      summary.classList.remove('hidden');
+      summary.innerHTML = `Using <strong>${p.name}</strong>: rotation ${Math.abs(t.rotationDeg).toFixed(4)}\u00b0, shift ${Math.abs(t.txMm).toFixed(2)}mm \u00d7 ${Math.abs(t.tyMm).toFixed(2)}mm`;
+    });
+
+    container.appendChild(chip);
+  });
+}
+
+renderPresets();
+
+// ==================== APPLY OFFSET ====================
+const applyDropzone = document.getElementById('applyDropzone');
+const applyFileInput = document.getElementById('applyFileInput');
+const applyFileInfo = document.getElementById('applyFileInfo');
+const applyBtn = document.getElementById('applyBtn');
+
+let applyPdfBytes = null;
+let applyPdfDoc = null;
+let applyPageCount = 0;
+
+applyDropzone.addEventListener('dragover', e => { e.preventDefault(); applyDropzone.classList.add('drag-over'); });
+applyDropzone.addEventListener('dragleave', () => applyDropzone.classList.remove('drag-over'));
+applyDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  applyDropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') loadApplyFile(file);
+});
+applyFileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadApplyFile(e.target.files[0]);
+});
+document.getElementById('applyRemoveFile').addEventListener('click', resetApplyFile);
+
+async function loadApplyFile(file) {
+  applyPdfBytes = await file.arrayBuffer();
+  try {
+    applyPdfDoc = await PDFDocument.load(applyPdfBytes);
+  } catch (err) {
+    alert('Failed to load PDF: ' + err.message);
+    return;
+  }
+  applyPageCount = applyPdfDoc.getPageCount();
+  const pg = applyPdfDoc.getPage(0);
+  const { width, height } = pg.getSize();
+
+  document.getElementById('applyFileName').textContent = file.name;
+  document.getElementById('applyFileMeta').textContent =
+    `${applyPageCount} pages \u00b7 ${(width/72).toFixed(1)}" \u00d7 ${(height/72).toFixed(1)}" \u00b7 ${(file.size / 1024).toFixed(0)} KB`;
+
+  applyDropzone.classList.add('hidden');
+  applyFileInfo.classList.remove('hidden');
+  applyBtn.disabled = false;
+}
+
+function resetApplyFile() {
+  applyPdfBytes = null;
+  applyPdfDoc = null;
+  applyPageCount = 0;
+  applyFileInput.value = '';
+  applyDropzone.classList.remove('hidden');
+  applyFileInfo.classList.add('hidden');
+  applyBtn.disabled = true;
+  document.getElementById('applyProgress').classList.add('hidden');
+}
+
+applyBtn.addEventListener('click', applyOffset);
+
+async function applyOffset() {
+  applyBtn.disabled = true;
+  const progressEl = document.getElementById('applyProgress');
+  const fillEl = document.getElementById('applyProgressFill');
+  const statusEl = document.getElementById('applyStatusText');
+  progressEl.classList.remove('hidden');
+  statusEl.textContent = 'Loading PDF...';
+  statusEl.className = 'status-text';
+  fillEl.style.width = '0%';
+
+  try {
+    const m = getMeasurements('apply_');
+    const t = computeTransform(m);
+
+    const srcPdf = await PDFDocument.load(applyPdfBytes);
+    const outPdf = await PDFDocument.create();
+    const totalPages = srcPdf.getPageCount();
+
+    // Embed ALL pages once upfront (shared resources, no bloat)
+    statusEl.textContent = 'Embedding pages...';
+    const srcPages = [];
+    for (let i = 0; i < totalPages; i++) {
+      srcPages.push(srcPdf.getPage(i));
+    }
+    const embeddedPages = await outPdf.embedPages(srcPages);
+
+    let corrected = 0;
+
+    for (let i = 0; i < totalPages; i++) {
+      fillEl.style.width = `${((i + 1) / totalPages * 100).toFixed(0)}%`;
+      statusEl.textContent = `Processing page ${i + 1} of ${totalPages}...`;
+
+      const embedded = embeddedPages[i];
+      const w = embedded.width;
+      const h = embedded.height;
+
+      // Preserve the source page's /Rotate attribute
+      const srcPage = srcPdf.getPage(i);
+      const srcRotation = srcPage.getRotation().angle; // 0, 90, 180, 270
+
+      // Create output page with same raw mediabox dimensions
+      const page = outPdf.addPage([w, h]);
+
+      if (i % 2 === 0) {
+        // Odd page (1-indexed): apply correction transform
+        // The measurement tells us where the back landed relative to the front.
+        // We shift the front in the SAME direction so it matches the back.
+        //
+        // The correction is in the DISPLAYED coordinate system (after /Rotate).
+        // But the cm operator works in the raw mediabox coordinate system.
+        // We need to transform the correction vector according to the page rotation.
+        let dx = t.txPt;
+        let dy = t.tyPt;
+        let corrAngle = t.rotationRad;
+
+        // Rotate the correction vector to match the raw coordinate system
+        if (srcRotation === 90) {
+          // Displayed X → raw Y, Displayed Y → raw -X
+          const tmp = dx;
+          dx = -dy;
+          dy = tmp;
+        } else if (srcRotation === 180) {
+          dx = -dx;
+          dy = -dy;
+        } else if (srcRotation === 270 || srcRotation === -90) {
+          // Displayed X → raw -Y, Displayed Y → raw X
+          const tmp = dx;
+          dx = dy;
+          dy = -tmp;
+        }
+
+        const cx = w / 2;
+        const cy = h / 2;
+        const cosA = Math.cos(corrAngle);
+        const sinA = Math.sin(corrAngle);
+
+        // Rotation around page center + translation:
+        const e = cx * (1 - cosA) + cy * sinA + dx;
+        const f = cy * (1 - cosA) - cx * sinA + dy;
+
+        const cmOp = PDFLib.PDFOperator.of('cm', [
+          PDFLib.PDFNumber.of(cosA),
+          PDFLib.PDFNumber.of(sinA),
+          PDFLib.PDFNumber.of(-sinA),
+          PDFLib.PDFNumber.of(cosA),
+          PDFLib.PDFNumber.of(e),
+          PDFLib.PDFNumber.of(f),
+        ]);
+
+        page.pushOperators(PDFLib.pushGraphicsState(), cmOp);
+        page.drawPage(embedded);
+        page.pushOperators(PDFLib.popGraphicsState());
+
+        corrected++;
+      } else {
+        // Even page: draw as-is
+        page.drawPage(embedded);
+      }
+
+      // Carry over the original /Rotate attribute
+      if (srcRotation !== 0) {
+        page.setRotation(degrees(srcRotation));
+      }
+
+      if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+
+    statusEl.textContent = 'Saving PDF...';
+    const outBytes = await outPdf.save();
+
+    const srcName = document.getElementById('applyFileName').textContent.replace(/\.pdf$/i, '');
+    downloadBlob(outBytes, `${srcName}_offset.pdf`, 'application/pdf');
+
+    statusEl.textContent = `Done! ${corrected} odd page(s) corrected out of ${totalPages} total.`;
+    statusEl.className = 'status-text done';
+
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.className = 'status-text error';
+    console.error(err);
+  }
+
+  applyBtn.disabled = false;
+}
+
+// ==================== UTILS ====================
+function downloadBlob(bytes, filename, mime) {
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

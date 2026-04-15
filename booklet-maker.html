@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Booklet Maker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --accent-hover: #ff6b81;
+    --text: #eee;
+    --text-dim: #aaa;
+    --border: #2a2a4a;
+    --success: #2ecc71;
+    --warning: #f39c12;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  header p {
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(233, 69, 96, 0.05);
+  }
+
+  .dropzone-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
+
+  .dropzone-text {
+    font-size: 16px;
+    color: var(--text-dim);
+  }
+
+  .dropzone-text strong {
+    color: var(--accent);
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* File info bar */
+  .file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .file-info .icon { font-size: 24px; }
+  .file-info .details { flex: 1; }
+  .file-info .name { font-weight: 600; font-size: 15px; }
+  .file-info .meta { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+
+  .file-info .remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+
+  .file-info .remove-btn:hover {
+    color: var(--accent);
+    background: rgba(233, 69, 96, 0.1);
+  }
+
+  /* Config panel */
+  .config {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 640px) {
+    .config { grid-template-columns: 1fr; }
+  }
+
+  .config-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .config-group.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .config-group h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .field {
+    margin-bottom: 12px;
+  }
+
+  .field:last-child { margin-bottom: 0; }
+
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  select, input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:focus, input:focus {
+    border-color: var(--accent);
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .row .field { flex: 1; }
+
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .checkbox-field input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Imposition preview */
+  .preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  .preview-table th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  .preview-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(42, 42, 74, 0.5);
+  }
+
+  .preview-table tr:last-child td { border-bottom: none; }
+
+  .preview-table .sig-divider td {
+    border-top: 2px solid var(--accent);
+    padding-top: 8px;
+  }
+
+  .page-num {
+    display: inline-block;
+    background: var(--surface2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    min-width: 32px;
+    text-align: center;
+    font-size: 12px;
+  }
+
+  .page-num.blank {
+    opacity: 0.4;
+    font-style: italic;
+  }
+
+  /* Generate button */
+  .actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .generate-btn {
+    flex: 1;
+    padding: 14px 24px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .generate-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+  }
+
+  .generate-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Progress */
+  .progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 12px;
+  }
+
+  .progress-bar .fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.2s;
+  }
+
+  .status-text {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    text-align: center;
+  }
+
+  .status-text.done { color: var(--success); }
+  .status-text.error { color: var(--accent); }
+
+  .hidden { display: none !important; }
+
+  /* Signature label */
+  .sig-label {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .preview-scroll {
+    max-height: 320px;
+    overflow-y: auto;
+    border-radius: 6px;
+  }
+
+  .preview-scroll::-webkit-scrollbar { width: 6px; }
+  .preview-scroll::-webkit-scrollbar-track { background: var(--bg); }
+  .preview-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Booklet Maker</h1>
+    <p>Impose PDF pages for saddle-stitch booklet printing. Everything runs in your browser.</p>
+  </header>
+
+  <!-- Drop zone -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-icon">📄</div>
+    <div class="dropzone-text">Drag & drop a PDF here, or <strong>click to browse</strong></div>
+    <input type="file" id="fileInput" accept=".pdf">
+  </div>
+
+  <!-- File info (shown after upload) -->
+  <div id="fileInfo" class="file-info hidden">
+    <span class="icon">📄</span>
+    <div class="details">
+      <div class="name" id="fileName"></div>
+      <div class="meta" id="fileMeta"></div>
+    </div>
+    <button class="remove-btn" id="removeFile" title="Remove file">✕</button>
+  </div>
+
+  <!-- Configuration -->
+  <div id="configPanel" class="config hidden">
+
+    <!-- Paper size -->
+    <div class="config-group">
+      <h3>Paper</h3>
+      <div class="field">
+        <label>Output paper size</label>
+        <select id="paperSize">
+          <option value="a4" selected>A4 (210 × 297 mm)</option>
+          <option value="letter">Letter (8.5 × 11 in)</option>
+          <option value="legal">Legal (8.5 × 14 in)</option>
+          <option value="a3">A3 (297 × 420 mm)</option>
+          <option value="custom">Custom...</option>
+        </select>
+      </div>
+      <div id="customPaper" class="row hidden">
+        <div class="field">
+          <label>Width (mm)</label>
+          <input type="number" id="customW" value="297" min="50" max="1000">
+        </div>
+        <div class="field">
+          <label>Height (mm)</label>
+          <input type="number" id="customH" value="210" min="50" max="1000">
+        </div>
+      </div>
+    </div>
+
+    <!-- Scaling & alignment -->
+    <div class="config-group">
+      <h3>Scaling</h3>
+      <div class="field">
+        <label>Fit mode</label>
+        <select id="fitMode">
+          <option value="fit" selected>Fit (preserve aspect ratio)</option>
+          <option value="fill">Fill (crop to fill half)</option>
+          <option value="none">No scaling (original size)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Horizontal alignment</label>
+        <select id="hAlign">
+          <option value="inner" selected>Inner edges at fold (no gap)</option>
+          <option value="center">Centered in each half</option>
+          <option value="outer">Outer edges at paper edge</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Vertical alignment</label>
+        <select id="vAlign">
+          <option value="center" selected>Center</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Rotation -->
+    <div class="config-group">
+      <h3>Rotation</h3>
+      <div class="field">
+        <label>Page rotation for duplex printing</label>
+        <select id="rotation">
+          <option value="front-cw" selected>Front CW 90° / Back CCW 90°</option>
+          <option value="front-ccw">Front CCW 90° / Back CW 90°</option>
+          <option value="none">No rotation</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top: 8px;">
+        <span class="checkbox-field">
+          <input type="checkbox" id="creepCompensation">
+          <label for="creepCompensation">Creep compensation (shift inner pages outward)</label>
+        </span>
+      </div>
+    </div>
+
+    <!-- Signatures -->
+    <div class="config-group">
+      <h3>Signatures</h3>
+      <div class="field">
+        <label>Binding style</label>
+        <select id="sigMode">
+          <option value="single" selected>Single booklet (saddle stitch)</option>
+          <option value="multi">Multiple signatures (perfect bind)</option>
+        </select>
+      </div>
+      <div id="sigSizeField" class="field hidden">
+        <label>Pages per signature (must be multiple of 4)</label>
+        <select id="sigSize">
+          <option value="4">4 pages (1 sheet)</option>
+          <option value="8">8 pages (2 sheets)</option>
+          <option value="12">12 pages (3 sheets)</option>
+          <option value="16" selected>16 pages (4 sheets)</option>
+          <option value="20">20 pages (5 sheets)</option>
+          <option value="24">24 pages (6 sheets)</option>
+          <option value="32">32 pages (8 sheets)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Page range -->
+    <div class="config-group full-width">
+      <h3>Page range</h3>
+      <div class="row">
+        <div class="field">
+          <label>From page</label>
+          <input type="number" id="pageFrom" value="1" min="1">
+        </div>
+        <div class="field">
+          <label>To page</label>
+          <input type="number" id="pageTo" value="1" min="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- Imposition preview -->
+    <div class="config-group full-width">
+      <h3>Imposition Preview</h3>
+      <div class="preview-scroll">
+        <table class="preview-table" id="previewTable">
+          <thead>
+            <tr>
+              <th>Sheet</th>
+              <th>Side</th>
+              <th>Left Page</th>
+              <th>Right Page</th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div id="actionsPanel" class="hidden">
+    <div class="actions">
+      <button class="generate-btn" id="generateBtn" disabled>Generate Booklet PDF</button>
+    </div>
+    <div id="progressContainer" class="hidden">
+      <div class="progress-bar"><div class="fill" id="progressFill" style="width: 0%"></div></div>
+      <div class="status-text" id="statusText">Preparing...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { PDFDocument, degrees } = PDFLib;
+
+// Paper sizes in points (width, height in portrait)
+const PAPER_SIZES = {
+  a4:     { w: 595.28, h: 841.89, label: 'A4' },
+  letter: { w: 612,    h: 792,    label: 'Letter' },
+  legal:  { w: 612,    h: 1008,   label: 'Legal' },
+  a3:     { w: 841.89, h: 1190.55, label: 'A3' },
+};
+
+const mmToPt = mm => mm * 72 / 25.4;
+
+let srcPdfBytes = null;
+let srcPdfDoc = null;
+let srcPageCount = 0;
+let srcPageSize = { w: 0, h: 0 };
+
+// --- DOM refs ---
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileMeta = document.getElementById('fileMeta');
+const removeFile = document.getElementById('removeFile');
+const configPanel = document.getElementById('configPanel');
+const actionsPanel = document.getElementById('actionsPanel');
+const generateBtn = document.getElementById('generateBtn');
+const paperSizeSelect = document.getElementById('paperSize');
+const customPaper = document.getElementById('customPaper');
+const sigModeSelect = document.getElementById('sigMode');
+const sigSizeField = document.getElementById('sigSizeField');
+const pageFromInput = document.getElementById('pageFrom');
+const pageToInput = document.getElementById('pageTo');
+const previewBody = document.getElementById('previewBody');
+const progressContainer = document.getElementById('progressContainer');
+const progressFill = document.getElementById('progressFill');
+const statusText = document.getElementById('statusText');
+
+// --- File handling ---
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') loadFile(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+removeFile.addEventListener('click', resetFile);
+
+async function loadFile(file) {
+  srcPdfBytes = await file.arrayBuffer();
+  try {
+    srcPdfDoc = await PDFDocument.load(srcPdfBytes);
+  } catch (err) {
+    alert('Failed to load PDF: ' + err.message);
+    return;
+  }
+  srcPageCount = srcPdfDoc.getPageCount();
+  const pg = srcPdfDoc.getPage(0);
+  const { width, height } = pg.getSize();
+  srcPageSize = { w: width, h: height };
+
+  fileName.textContent = file.name;
+  fileMeta.textContent = `${srcPageCount} pages · ${(width/72).toFixed(1)}" × ${(height/72).toFixed(1)}" · ${(file.size / 1024).toFixed(0)} KB`;
+
+  dropzone.classList.add('hidden');
+  fileInfo.classList.remove('hidden');
+  configPanel.classList.remove('hidden');
+  actionsPanel.classList.remove('hidden');
+
+  pageFromInput.value = 1;
+  pageFromInput.max = srcPageCount;
+  pageToInput.value = srcPageCount;
+  pageToInput.max = srcPageCount;
+
+  generateBtn.disabled = false;
+  updatePreview();
+}
+
+function resetFile() {
+  srcPdfBytes = null;
+  srcPdfDoc = null;
+  srcPageCount = 0;
+  fileInput.value = '';
+  dropzone.classList.remove('hidden');
+  fileInfo.classList.add('hidden');
+  configPanel.classList.add('hidden');
+  actionsPanel.classList.add('hidden');
+  progressContainer.classList.add('hidden');
+}
+
+// --- Config listeners ---
+paperSizeSelect.addEventListener('change', () => {
+  customPaper.classList.toggle('hidden', paperSizeSelect.value !== 'custom');
+  updatePreview();
+});
+sigModeSelect.addEventListener('change', () => {
+  sigSizeField.classList.toggle('hidden', sigModeSelect.value !== 'multi');
+  updatePreview();
+});
+
+[pageFromInput, pageToInput, document.getElementById('sigSize'),
+ document.getElementById('fitMode'), document.getElementById('hAlign'),
+ document.getElementById('vAlign'), document.getElementById('rotation'),
+ document.getElementById('creepCompensation'),
+ document.getElementById('customW'), document.getElementById('customH')
+].forEach(el => el.addEventListener('change', updatePreview));
+
+// --- Imposition logic ---
+function getConfig() {
+  const paperKey = paperSizeSelect.value;
+  let paperW, paperH;
+  if (paperKey === 'custom') {
+    paperW = mmToPt(parseFloat(document.getElementById('customW').value) || 297);
+    paperH = mmToPt(parseFloat(document.getElementById('customH').value) || 210);
+  } else {
+    const ps = PAPER_SIZES[paperKey];
+    // Landscape: swap so width > height
+    paperW = Math.max(ps.w, ps.h);
+    paperH = Math.min(ps.w, ps.h);
+  }
+
+  const pageFrom = Math.max(1, parseInt(pageFromInput.value) || 1);
+  const pageTo = Math.min(srcPageCount, parseInt(pageToInput.value) || srcPageCount);
+  const totalPages = Math.max(0, pageTo - pageFrom + 1);
+
+  const sigMode = sigModeSelect.value;
+  const sigSize = parseInt(document.getElementById('sigSize').value) || 16;
+
+  return {
+    paperW, paperH,
+    fitMode: document.getElementById('fitMode').value,
+    hAlign: document.getElementById('hAlign').value,
+    vAlign: document.getElementById('vAlign').value,
+    rotation: document.getElementById('rotation').value,
+    creep: document.getElementById('creepCompensation').checked,
+    sigMode, sigSize,
+    pageFrom, pageTo, totalPages,
+  };
+}
+
+function computeSignatures(cfg) {
+  const { totalPages, sigMode, sigSize } = cfg;
+  if (totalPages === 0) return [];
+
+  const signatures = [];
+  if (sigMode === 'single') {
+    const padded = totalPages + (totalPages % 4 === 0 ? 0 : 4 - (totalPages % 4));
+    signatures.push({ startPage: 0, count: padded, originalCount: totalPages });
+  } else {
+    let remaining = totalPages;
+    let offset = 0;
+    while (remaining > 0) {
+      const thisCount = Math.min(sigSize, remaining);
+      const padded = thisCount + (thisCount % 4 === 0 ? 0 : 4 - (thisCount % 4));
+      signatures.push({ startPage: offset, count: padded, originalCount: thisCount });
+      offset += thisCount;
+      remaining -= thisCount;
+    }
+  }
+  return signatures;
+}
+
+function computeSheetOrder(sigPageCount) {
+  // Returns array of [frontLeft, frontRight, backLeft, backRight] (0-indexed within signature)
+  const sheets = [];
+  const numSheets = sigPageCount / 4;
+  for (let i = 0; i < numSheets; i++) {
+    sheets.push({
+      frontLeft: sigPageCount - 1 - 2 * i,
+      frontRight: 2 * i,
+      backLeft: 2 * i + 1,
+      backRight: sigPageCount - 2 - 2 * i,
+    });
+  }
+  return sheets;
+}
+
+function updatePreview() {
+  if (!srcPdfDoc) return;
+  const cfg = getConfig();
+  const sigs = computeSignatures(cfg);
+
+  previewBody.innerHTML = '';
+  let globalSheet = 0;
+
+  sigs.forEach((sig, sigIdx) => {
+    const sheets = computeSheetOrder(sig.count);
+    sheets.forEach((sh, shIdx) => {
+      const absPage = idx => {
+        const abs = sig.startPage + idx + cfg.pageFrom; // 1-indexed
+        if (idx >= sig.originalCount) return null; // blank
+        return abs;
+      };
+
+      const makeCell = idx => {
+        const p = absPage(idx);
+        if (p === null) return '<span class="page-num blank">blank</span>';
+        return `<span class="page-num">${p}</span>`;
+      };
+
+      // Front row
+      const frontRow = document.createElement('tr');
+      if (shIdx === 0 && sigs.length > 1) frontRow.classList.add('sig-divider');
+      frontRow.innerHTML = `
+        <td>${shIdx === 0 && sigs.length > 1 ? `<span class="sig-label">Sig ${sigIdx + 1}</span><br>` : ''}${globalSheet + 1}</td>
+        <td>Front</td>
+        <td>${makeCell(sh.frontLeft)}</td>
+        <td>${makeCell(sh.frontRight)}</td>
+      `;
+      previewBody.appendChild(frontRow);
+
+      // Back row
+      const backRow = document.createElement('tr');
+      backRow.innerHTML = `
+        <td></td>
+        <td>Back</td>
+        <td>${makeCell(sh.backLeft)}</td>
+        <td>${makeCell(sh.backRight)}</td>
+      `;
+      previewBody.appendChild(backRow);
+
+      globalSheet++;
+    });
+  });
+}
+
+// --- PDF Generation ---
+generateBtn.addEventListener('click', generate);
+
+async function generate() {
+  generateBtn.disabled = true;
+  progressContainer.classList.remove('hidden');
+  statusText.textContent = 'Preparing...';
+  statusText.className = 'status-text';
+  progressFill.style.width = '0%';
+
+  try {
+    const cfg = getConfig();
+    const sigs = computeSignatures(cfg);
+
+    // Count total output pages for progress
+    let totalOutputPages = 0;
+    sigs.forEach(sig => { totalOutputPages += (sig.count / 4) * 2; });
+
+    const outPdf = await PDFDocument.create();
+
+    // Embed ALL source pages once upfront to avoid duplicating resources
+    statusText.textContent = 'Embedding pages...';
+    const srcPages = [];
+    for (let i = cfg.pageFrom - 1; i < cfg.pageTo; i++) {
+      srcPages.push(srcPdfDoc.getPage(i));
+    }
+    const embeddedPages = await outPdf.embedPages(srcPages);
+
+    let pagesProcessed = 0;
+
+    for (const sig of sigs) {
+      const sheets = computeSheetOrder(sig.count);
+      const numSheets = sheets.length;
+
+      for (let shIdx = 0; shIdx < sheets.length; shIdx++) {
+        const sh = sheets[shIdx];
+
+        // Creep compensation: shift inner sheets outward
+        let creepShift = 0;
+        if (cfg.creep && numSheets > 1) {
+          // Max creep ~ 1pt per sheet, linear from outer to inner
+          const maxCreep = numSheets * 0.5;
+          creepShift = maxCreep * (shIdx / (numSheets - 1));
+        }
+
+        // Process front side
+        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages);
+        pagesProcessed++;
+        progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
+        statusText.textContent = `Processing sheet ${Math.ceil(pagesProcessed / 2)} of ${totalOutputPages / 2}...`;
+
+        // Process back side
+        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages);
+        pagesProcessed++;
+        progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
+
+        // Yield to UI
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    statusText.textContent = 'Saving PDF...';
+    const pdfBytes = await outPdf.save();
+
+    // Trigger download
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const srcName = fileName.textContent.replace(/\.pdf$/i, '');
+    a.download = `${srcName} - Booklet.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    statusText.textContent = `Done! ${totalOutputPages / 2} sheets (${totalOutputPages} pages) generated.`;
+    statusText.className = 'status-text done';
+
+  } catch (err) {
+    statusText.textContent = 'Error: ' + err.message;
+    statusText.className = 'status-text error';
+    console.error(err);
+  }
+
+  generateBtn.disabled = false;
+}
+
+function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages) {
+  const { paperW, paperH, fitMode, hAlign, vAlign, rotation } = cfg;
+  const halfW = paperW / 2;
+
+  // Create the output page in landscape
+  const page = outPdf.addPage([paperW, paperH]);
+
+  for (let pos = 0; pos < 2; pos++) {
+    const idx = pos === 0 ? leftIdx : rightIdx;
+
+    // Check if this page is blank (padding)
+    if (idx >= sig.originalCount) continue;
+
+    // Absolute 0-indexed into embeddedPages array
+    const absSrcIdx = sig.startPage + idx;
+    if (absSrcIdx >= embeddedPages.length) continue;
+
+    // Look up the pre-embedded page
+    const embedded = embeddedPages[absSrcIdx];
+    const srcW = embedded.width;
+    const srcH = embedded.height;
+
+    // Calculate scale
+    let scale;
+    if (fitMode === 'none') {
+      scale = 1;
+    } else if (fitMode === 'fill') {
+      scale = Math.max(halfW / srcW, paperH / srcH);
+    } else {
+      scale = Math.min(halfW / srcW, paperH / srcH);
+    }
+
+    const scaledW = srcW * scale;
+    const scaledH = srcH * scale;
+
+    // Vertical alignment
+    let ty;
+    if (vAlign === 'top') ty = paperH - scaledH;
+    else if (vAlign === 'bottom') ty = 0;
+    else ty = (paperH - scaledH) / 2;
+
+    // Horizontal alignment
+    let tx;
+    if (pos === 0) {
+      // Left page
+      if (hAlign === 'inner') tx = halfW - scaledW;       // right-align to fold
+      else if (hAlign === 'outer') tx = 0;                 // left-align to paper edge
+      else tx = (halfW - scaledW) / 2;                     // center
+
+      // Creep: shift left page leftward
+      tx -= creepShift;
+    } else {
+      // Right page
+      if (hAlign === 'inner') tx = halfW;                  // left-align to fold
+      else if (hAlign === 'outer') tx = paperW - scaledW;  // right-align to paper edge
+      else tx = halfW + (halfW - scaledW) / 2;             // center
+
+      // Creep: shift right page rightward
+      tx += creepShift;
+    }
+
+    page.drawPage(embedded, {
+      x: tx,
+      y: ty,
+      width: scaledW,
+      height: scaledH,
+    });
+  }
+
+  // Apply rotation
+  if (rotation === 'front-cw') {
+    page.setRotation(isFront ? degrees(90) : degrees(-90));
+  } else if (rotation === 'front-ccw') {
+    page.setRotation(isFront ? degrees(-90) : degrees(90));
+  }
+}
+</script>
+</body>
+</html>
