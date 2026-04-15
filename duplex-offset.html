@@ -400,10 +400,17 @@
     <div id="step1" class="panel">
       <h3>Step 1 — Print Calibration Template</h3>
       <p style="font-size: 14px; color: var(--text-dim); margin-bottom: 14px;">
-        This generates an A4 PDF with alignment crosses at the top-left and bottom-right corners
+        This generates a PDF with alignment crosses at the top-left and bottom-right corners
         (10mm from edges), printed on both front and back. Print it <strong>duplex, at 100% scale
         (no fit-to-page)</strong>, then measure the offset between front and back crosses.
       </p>
+      <div class="field">
+        <label>Paper size</label>
+        <select id="paperSize">
+          <option value="a4">A4 (210 × 297 mm)</option>
+          <option value="letter">Letter (8.5 × 11 in)</option>
+        </select>
+      </div>
       <button class="btn btn-primary" id="genTemplateBtn">Download Calibration Template</button>
     </div>
 
@@ -478,6 +485,13 @@
     <!-- Or manual entry -->
     <div class="panel">
       <h3>Or Enter Offsets Manually</h3>
+      <div class="field" style="margin-bottom: 14px;">
+        <label>Paper size used for calibration</label>
+        <select id="applyPaperSize">
+          <option value="a4">A4 (210 × 297 mm)</option>
+          <option value="letter">Letter (8.5 × 11 in)</option>
+        </select>
+      </div>
       <div class="corner-input">
         <h4>Top-Left Corner</h4>
         <div class="row">
@@ -538,9 +552,11 @@ const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
 
 const MM_TO_PT = 72 / 25.4;
 
-// A4 in points
-const A4_W = 595.28;
-const A4_H = 841.89;
+// Paper sizes: points and mm
+const PAPER_SIZES = {
+  a4:     { wPt: 595.28, hPt: 841.89, wMm: 210,   hMm: 297,   label: 'A4 (210 \u00d7 297 mm)' },
+  letter: { wPt: 612,    hPt: 792,    wMm: 215.9,  hMm: 279.4, label: 'Letter (8.5 \u00d7 11 in)' },
+};
 
 // Cross position: 10mm from edges
 const CROSS_INSET = 10 * MM_TO_PT;
@@ -573,25 +589,29 @@ function setStep(n) {
 document.getElementById('genTemplateBtn').addEventListener('click', generateTemplate);
 
 async function generateTemplate() {
+  const paper = PAPER_SIZES[document.getElementById('paperSize').value];
+  const W = paper.wPt;
+  const H = paper.hPt;
+
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.HelveticaBold);
 
   // Cross positions (center of cross) — bottom-left origin
   const tlX = CROSS_INSET;
-  const tlY = A4_H - CROSS_INSET;
-  const brX = A4_W - CROSS_INSET;
+  const tlY = H - CROSS_INSET;
+  const brX = W - CROSS_INSET;
   const brY = CROSS_INSET;
 
   // --- FRONT PAGE ---
-  const frontPage = pdf.addPage([A4_W, A4_H]);
+  const frontPage = pdf.addPage([W, H]);
   drawCross(frontPage, tlX, tlY);
   drawCross(frontPage, brX, brY);
 
   const frontText = 'FRONT';
   const ftw = font.widthOfTextAtSize(frontText, 48);
   frontPage.drawText(frontText, {
-    x: (A4_W - ftw) / 2,
-    y: A4_H / 2 + 20,
+    x: (W - ftw) / 2,
+    y: H / 2 + 20,
     size: 48, font,
     color: rgb(0.8, 0.8, 0.8),
   });
@@ -604,8 +624,8 @@ async function generateTemplate() {
   instrLines.forEach((line, i) => {
     const lw = font.widthOfTextAtSize(line, 10);
     frontPage.drawText(line, {
-      x: (A4_W - lw) / 2,
-      y: A4_H / 2 - 20 - i * 16,
+      x: (W - lw) / 2,
+      y: H / 2 - 20 - i * 16,
       size: 10, font,
       color: rgb(0.6, 0.6, 0.6),
     });
@@ -655,7 +675,7 @@ async function generateTemplate() {
   explLines.forEach((line, i) => {
     const lw = labelFont.widthOfTextAtSize(line, 8);
     frontPage.drawText(line, {
-      x: (A4_W - lw) / 2,
+      x: (W - lw) / 2,
       y: 60 - i * 12,
       size: 8, font: labelFont, color: gray,
     });
@@ -664,10 +684,10 @@ async function generateTemplate() {
   // --- BACK PAGE ---
   // When the printer duplexes (long-edge flip), the back page is mirrored horizontally.
   // So we place back crosses at mirrored-X positions so they align with front crosses when held to light.
-  const backPage = pdf.addPage([A4_W, A4_H]);
+  const backPage = pdf.addPage([W, H]);
 
-  const backTlX = A4_W - CROSS_INSET;  // mirrors to front TL when flipped
-  const backTlY = A4_H - CROSS_INSET;
+  const backTlX = W - CROSS_INSET;  // mirrors to front TL when flipped
+  const backTlY = H - CROSS_INSET;
   const backBrX = CROSS_INSET;          // mirrors to front BR when flipped
   const backBrY = CROSS_INSET;
 
@@ -677,8 +697,8 @@ async function generateTemplate() {
   const backText = 'BACK';
   const btw = font.widthOfTextAtSize(backText, 48);
   backPage.drawText(backText, {
-    x: (A4_W - btw) / 2,
-    y: A4_H / 2 + 20,
+    x: (W - btw) / 2,
+    y: H / 2 + 20,
     size: 48, font,
     color: rgb(0.8, 0.8, 0.8),
   });
@@ -687,7 +707,7 @@ async function generateTemplate() {
   backPage.drawText('BR', { x: backBrX + CROSS_SIZE + 4, y: backBrY - 5, size: 8, font, color: rgb(0, 0, 0) });
 
   const pdfBytes = await pdf.save();
-  downloadBlob(pdfBytes, 'Duplex Calibration Template.pdf', 'application/pdf');
+  downloadBlob(pdfBytes, `Duplex Calibration Template (${paper.label}).pdf`, 'application/pdf');
   setStep(2);
 }
 
@@ -720,6 +740,7 @@ function drawCross(page, cx, cy) {
 ['tl_x', 'tl_y', 'br_x', 'br_y'].forEach(id => {
   document.getElementById(id).addEventListener('input', updateComputed);
 });
+document.getElementById('paperSize').addEventListener('change', updateComputed);
 
 function getMeasurements(prefix) {
   return {
@@ -730,11 +751,11 @@ function getMeasurements(prefix) {
   };
 }
 
-function computeTransform(m) {
+function computeTransform(m, paperWMm, paperHMm) {
   // Two corner measurements give rotation + translation.
   // Cross positions on front page (mm, bottom-left origin):
-  const tlFront = { x: 10, y: 297 - 10 };  // A4: 210x297mm
-  const brFront = { x: 210 - 10, y: 10 };
+  const tlFront = { x: 10, y: paperHMm - 10 };
+  const brFront = { x: paperWMm - 10, y: 10 };
 
   // Where back crosses actually landed (as seen from front):
   const tlBack = { x: tlFront.x + m.tlX, y: tlFront.y + m.tlY };
@@ -767,7 +788,8 @@ function computeTransform(m) {
 
 function updateComputed() {
   const m = getMeasurements('');
-  const t = computeTransform(m);
+  const paper = PAPER_SIZES[document.getElementById('paperSize').value];
+  const t = computeTransform(m, paper.wMm, paper.hMm);
   const el = document.getElementById('computedSummary');
 
   const rotDir = t.rotationDeg > 0 ? 'counterclockwise' : t.rotationDeg < 0 ? 'clockwise' : 'none';
@@ -831,7 +853,7 @@ document.getElementById('savePresetBtn').addEventListener('click', () => {
   const presets = loadAllPresets();
 
   const idx = presets.findIndex(p => p.name === name);
-  const preset = { name, tlX: m.tlX, tlY: m.tlY, brX: m.brX, brY: m.brY, date: new Date().toISOString() };
+  const preset = { name, tlX: m.tlX, tlY: m.tlY, brX: m.brX, brY: m.brY, paperSize: document.getElementById('paperSize').value, date: new Date().toISOString() };
   if (idx >= 0) presets[idx] = preset;
   else presets.push(preset);
 
@@ -874,12 +896,15 @@ function renderPresets() {
       document.getElementById('apply_tl_y').value = p.tlY;
       document.getElementById('apply_br_x').value = p.brX;
       document.getElementById('apply_br_y').value = p.brY;
+      const paperKey = p.paperSize || 'a4';
+      document.getElementById('applyPaperSize').value = paperKey;
       renderPresets();
 
-      const t = computeTransform(p);
+      const paper = PAPER_SIZES[paperKey];
+      const t = computeTransform(p, paper.wMm, paper.hMm);
       const summary = document.getElementById('activePresetSummary');
       summary.classList.remove('hidden');
-      summary.innerHTML = `Using <strong>${p.name}</strong>: rotation ${Math.abs(t.rotationDeg).toFixed(4)}\u00b0, shift ${Math.abs(t.txMm).toFixed(2)}mm \u00d7 ${Math.abs(t.tyMm).toFixed(2)}mm`;
+      summary.innerHTML = `Using <strong>${p.name}</strong> (${paper.label}): rotation ${Math.abs(t.rotationDeg).toFixed(4)}\u00b0, shift ${Math.abs(t.txMm).toFixed(2)}mm \u00d7 ${Math.abs(t.tyMm).toFixed(2)}mm`;
     });
 
     container.appendChild(chip);
@@ -957,7 +982,8 @@ async function applyOffset() {
 
   try {
     const m = getMeasurements('apply_');
-    const t = computeTransform(m);
+    const paper = PAPER_SIZES[document.getElementById('applyPaperSize').value];
+    const t = computeTransform(m, paper.wMm, paper.hMm);
 
     const srcPdf = await PDFDocument.load(applyPdfBytes);
     const outPdf = await PDFDocument.create();
