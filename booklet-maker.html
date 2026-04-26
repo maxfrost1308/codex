@@ -450,6 +450,14 @@
           <option value="32">32 pages (8 sheets)</option>
         </select>
       </div>
+      <div class="field">
+        <label>Cover pages</label>
+        <select id="coverMode">
+          <option value="none" selected>None (all pages are content)</option>
+          <option value="front">Front cover only</option>
+          <option value="both">Front & back covers</option>
+        </select>
+      </div>
     </div>
 
     <!-- Page range -->
@@ -530,6 +538,7 @@ const paperSizeSelect = document.getElementById('paperSize');
 const customPaper = document.getElementById('customPaper');
 const sigModeSelect = document.getElementById('sigMode');
 const sigSizeField = document.getElementById('sigSizeField');
+const coverModeSelect = document.getElementById('coverMode');
 const pageFromInput = document.getElementById('pageFrom');
 const pageToInput = document.getElementById('pageTo');
 const previewBody = document.getElementById('previewBody');
@@ -607,7 +616,8 @@ sigModeSelect.addEventListener('change', () => {
  document.getElementById('fitMode'), document.getElementById('hAlign'),
  document.getElementById('vAlign'), document.getElementById('rotation'),
  document.getElementById('creepCompensation'),
- document.getElementById('customW'), document.getElementById('customH')
+ document.getElementById('customW'), document.getElementById('customH'),
+ coverModeSelect
 ].forEach(el => el.addEventListener('change', updatePreview));
 
 // --- Imposition logic ---
@@ -639,23 +649,57 @@ function getConfig() {
     rotation: document.getElementById('rotation').value,
     creep: document.getElementById('creepCompensation').checked,
     sigMode, sigSize,
+    coverMode: coverModeSelect.value,
     pageFrom, pageTo, totalPages,
   };
 }
 
-function computeSignatures(cfg) {
-  const { totalPages, sigMode, sigSize } = cfg;
+// Build a mapping from booklet slot positions to source page indices.
+// Returns an array where each element is a 0-based source page index, or null for blank.
+function buildPageMap(cfg) {
+  const { totalPages, coverMode } = cfg;
   if (totalPages === 0) return [];
 
+  const map = [];
+  if (coverMode === 'none') {
+    for (let i = 0; i < totalPages; i++) map.push(i);
+  } else if (coverMode === 'front') {
+    map.push(0);       // front cover
+    map.push(null);    // inside front cover (blank)
+    for (let i = 1; i < totalPages; i++) map.push(i);
+    map.push(null);    // inside back cover (blank)
+    map.push(null);    // back cover (blank)
+  } else if (coverMode === 'both') {
+    if (totalPages < 2) {
+      // Not enough pages for separate front & back; treat as front-only
+      map.push(0);
+      map.push(null);
+      map.push(null);
+      map.push(null);
+    } else {
+      map.push(0);                    // front cover
+      map.push(null);                 // inside front cover (blank)
+      for (let i = 1; i < totalPages - 1; i++) map.push(i);
+      map.push(null);                 // inside back cover (blank)
+      map.push(totalPages - 1);       // back cover
+    }
+  }
+  return map;
+}
+
+function computeSignatures(cfg, pageMap) {
+  const totalSlots = pageMap.length;
+  if (totalSlots === 0) return [];
+
   const signatures = [];
-  if (sigMode === 'single') {
-    const padded = totalPages + (totalPages % 4 === 0 ? 0 : 4 - (totalPages % 4));
-    signatures.push({ startPage: 0, count: padded, originalCount: totalPages });
+  if (cfg.sigMode === 'single') {
+    const padded = totalSlots + (totalSlots % 4 === 0 ? 0 : 4 - (totalSlots % 4));
+    signatures.push({ startPage: 0, count: padded, originalCount: totalSlots });
   } else {
-    let remaining = totalPages;
+    let remaining = totalSlots;
     let offset = 0;
     while (remaining > 0) {
-      const thisCount = Math.min(sigSize, remaining);
+      const thisCount = Math.min(cfg.sigSize, remaining);
       const padded = thisCount + (thisCount % 4 === 0 ? 0 : 4 - (thisCount % 4));
       signatures.push({ startPage: offset, count: padded, originalCount: thisCount });
       offset += thisCount;
@@ -683,7 +727,8 @@ function computeSheetOrder(sigPageCount) {
 function updatePreview() {
   if (!srcPdfDoc) return;
   const cfg = getConfig();
-  const sigs = computeSignatures(cfg);
+  const pageMap = buildPageMap(cfg);
+  const sigs = computeSignatures(cfg, pageMap);
 
   previewBody.innerHTML = '';
   let globalSheet = 0;
@@ -692,9 +737,10 @@ function updatePreview() {
     const sheets = computeSheetOrder(sig.count);
     sheets.forEach((sh, shIdx) => {
       const absPage = idx => {
-        const abs = sig.startPage + idx + cfg.pageFrom; // 1-indexed
-        if (idx >= sig.originalCount) return null; // blank
-        return abs;
+        if (idx >= sig.originalCount) return null; // padding blank
+        const srcIdx = pageMap[sig.startPage + idx];
+        if (srcIdx === null) return null; // cover blank
+        return srcIdx + cfg.pageFrom; // 1-indexed for display
       };
 
       const makeCell = idx => {
@@ -741,7 +787,8 @@ async function generate() {
 
   try {
     const cfg = getConfig();
-    const sigs = computeSignatures(cfg);
+    const pageMap = buildPageMap(cfg);
+    const sigs = computeSignatures(cfg, pageMap);
 
     // Count total output pages for progress
     let totalOutputPages = 0;
@@ -775,13 +822,13 @@ async function generate() {
         }
 
         // Process front side
-        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages);
+        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages, pageMap);
         pagesProcessed++;
         progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
         statusText.textContent = `Processing sheet ${Math.ceil(pagesProcessed / 2)} of ${totalOutputPages / 2}...`;
 
         // Process back side
-        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages);
+        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages, pageMap);
         pagesProcessed++;
         progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
 
@@ -815,7 +862,7 @@ async function generate() {
   generateBtn.disabled = false;
 }
 
-function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages) {
+function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages, pageMap) {
   const { paperW, paperH, fitMode, hAlign, vAlign, rotation } = cfg;
   const halfW = paperW / 2;
 
@@ -825,15 +872,15 @@ function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, 
   for (let pos = 0; pos < 2; pos++) {
     const idx = pos === 0 ? leftIdx : rightIdx;
 
-    // Check if this page is blank (padding)
+    // Check if this page is blank (padding or cover blank)
     if (idx >= sig.originalCount) continue;
+    const srcIdx = pageMap[sig.startPage + idx];
+    if (srcIdx === null) continue;
 
-    // Absolute 0-indexed into embeddedPages array
-    const absSrcIdx = sig.startPage + idx;
-    if (absSrcIdx >= embeddedPages.length) continue;
+    if (srcIdx >= embeddedPages.length) continue;
 
     // Look up the pre-embedded page
-    const embedded = embeddedPages[absSrcIdx];
+    const embedded = embeddedPages[srcIdx];
     const srcW = embedded.width;
     const srcH = embedded.height;
 
