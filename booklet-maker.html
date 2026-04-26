@@ -691,19 +691,38 @@ function computeSignatures(cfg, pageMap) {
   const totalSlots = pageMap.length;
   if (totalSlots === 0) return [];
 
+  // Number of back-cover slots that must stay at the end of the last chunk.
+  // For cover modes, the last 2 positions are inside-back + back-cover.
+  const coverBackSlots = cfg.coverMode !== 'none' ? 2 : 0;
+
+  // Pad a chunk to a multiple of 4. For the last chunk in cover mode,
+  // padding is inserted BEFORE the back-cover positions so that the
+  // back cover lands on frontLeft of the outermost sheet.
+  function padChunk(chunk, isLast) {
+    const len = chunk.length;
+    if (len % 4 === 0) return chunk;
+    const padCount = 4 - (len % 4);
+    const padding = new Array(padCount).fill(null);
+    if (isLast && coverBackSlots > 0 && len > coverBackSlots) {
+      const insertAt = len - coverBackSlots;
+      return chunk.slice(0, insertAt).concat(padding, chunk.slice(insertAt));
+    }
+    return chunk.concat(padding);
+  }
+
   const signatures = [];
   if (cfg.sigMode === 'single') {
-    const padded = totalSlots + (totalSlots % 4 === 0 ? 0 : 4 - (totalSlots % 4));
-    signatures.push({ startPage: 0, count: padded, originalCount: totalSlots });
+    const padded = padChunk(pageMap.slice(), true);
+    signatures.push({ count: padded.length, paddedMap: padded });
   } else {
-    let remaining = totalSlots;
     let offset = 0;
-    while (remaining > 0) {
-      const thisCount = Math.min(cfg.sigSize, remaining);
-      const padded = thisCount + (thisCount % 4 === 0 ? 0 : 4 - (thisCount % 4));
-      signatures.push({ startPage: offset, count: padded, originalCount: thisCount });
-      offset += thisCount;
-      remaining -= thisCount;
+    while (offset < totalSlots) {
+      const take = Math.min(cfg.sigSize, totalSlots - offset);
+      const isLast = (offset + take >= totalSlots);
+      const chunk = pageMap.slice(offset, offset + take);
+      const padded = padChunk(chunk, isLast);
+      signatures.push({ count: padded.length, paddedMap: padded });
+      offset += take;
     }
   }
   return signatures;
@@ -737,9 +756,9 @@ function updatePreview() {
     const sheets = computeSheetOrder(sig.count);
     sheets.forEach((sh, shIdx) => {
       const absPage = idx => {
-        if (idx >= sig.originalCount) return null; // padding blank
-        const srcIdx = pageMap[sig.startPage + idx];
-        if (srcIdx === null) return null; // cover blank
+        if (idx >= sig.count) return null;
+        const srcIdx = sig.paddedMap[idx];
+        if (srcIdx === null) return null;
         return srcIdx + cfg.pageFrom; // 1-indexed for display
       };
 
@@ -822,13 +841,13 @@ async function generate() {
         }
 
         // Process front side
-        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages, pageMap);
+        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages);
         pagesProcessed++;
         progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
         statusText.textContent = `Processing sheet ${Math.ceil(pagesProcessed / 2)} of ${totalOutputPages / 2}...`;
 
         // Process back side
-        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages, pageMap);
+        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages);
         pagesProcessed++;
         progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
 
@@ -862,7 +881,7 @@ async function generate() {
   generateBtn.disabled = false;
 }
 
-function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages, pageMap) {
+function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages) {
   const { paperW, paperH, fitMode, hAlign, vAlign, rotation } = cfg;
   const halfW = paperW / 2;
 
@@ -873,8 +892,8 @@ function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, 
     const idx = pos === 0 ? leftIdx : rightIdx;
 
     // Check if this page is blank (padding or cover blank)
-    if (idx >= sig.originalCount) continue;
-    const srcIdx = pageMap[sig.startPage + idx];
+    if (idx >= sig.count) continue;
+    const srcIdx = sig.paddedMap[idx];
     if (srcIdx === null) continue;
 
     if (srcIdx >= embeddedPages.length) continue;
