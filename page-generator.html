@@ -414,11 +414,29 @@
             <input type="number" id="ruled-marginLinePosition" min="5" max="100" step="1" value="15">
           </div>
         </div>
+       </div>
+       <!-- Header line controls -->
+       <div class="checkbox-field" style="margin-top: 8px;">
+         <input type="checkbox" id="ruled-headerLine">
+         <label for="ruled-headerLine">Thicker first line</label>
+       </div>
+       <div id="ruled-headerLine-controls" style="display:none; margin-top: 8px;">
+         <div class="config" style="margin-bottom: 0;">
+           <div class="field">
+             <label>Header Line Weight (mm)</label>
+             <input type="number" id="ruled-headerLineWeight" min="0.3" max="4" step="0.1" value="0.6">
+           </div>
+         </div>
+        </div>
+      </div>
+      <!-- Midline controls -->
+      <div class="checkbox-field" style="margin-top: 8px;">
+        <input type="checkbox" id="ruled-midlines">
+        <label for="ruled-midlines">Show midline guides</label>
       </div>
     </div>
-  </div>
 
-  <!-- Square Grid Panel -->
+    <!-- Square Grid Panel -->
   <div class="tab-content" id="panel-square-grid">
     <div class="panel">
       <h3>Square Grid Settings</h3>
@@ -491,6 +509,17 @@
         <div class="field">
           <label>Margin Left (mm)</label>
           <input type="number" id="isometric-marginLeft" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Mode</label>
+          <select id="isometric-mode" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="lines" selected>Lines</option>
+            <option value="dots">Dots</option>
+          </select>
+        </div>
+        <div class="field" id="isometric-dotSize-field" style="display:none">
+          <label>Dot Size (mm)</label>
+          <input type="number" id="isometric-dotSize" min="0.3" max="3" step="0.1" value="0.8">
         </div>
       </div>
     </div>
@@ -598,9 +627,9 @@ const COLORS = [
 ];
 const PRESETS = {
   'dot-grid':    { spacing: 5, dotSize: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.5, shape: 'circle' },
-  'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4, marginLine: false, marginLineColor: [0.89, 0.27, 0.27], marginLineWeight: 0.5, marginLinePosition: 15 },
+  'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4, marginLine: false, marginLineColor: [0.89, 0.27, 0.27], marginLineWeight: 0.5, marginLinePosition: 15, headerLine: false, headerLineWeight: 0.6, midlines: false },
   'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4, majorInterval: 0, majorWeight: 0.5, majorOpacity: 0.7 },
-  'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35 },
+  'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, mode: 'lines', dotSize: 0.8 },
   'cornell': {
     letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 },
     a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 }
@@ -639,21 +668,41 @@ function drawDotGrid(page, config) {
 }
 function drawRuled(page, config) {
   const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
-          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition } = config;
+          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition,
+          headerLine = false, headerLineWeight,
+          midlines = false } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
   const top = paperH - marginTop;
   const [r, g, b] = color;
+  const midlineOpacity = Math.max(0.05, opacity / 2);
 
+  let lineIdx = 0;
   for (let y = top; y >= bottom; y -= spacing) {
+    const isHeader = headerLine && lineIdx === 0;
     page.drawLine({
       start: { x: left, y },
       end: { x: right, y },
-      thickness: lineWeight,
+      thickness: isHeader ? headerLineWeight : lineWeight,
       color: rgb(r, g, b),
       opacity
     });
+
+    if (midlines) {
+      const midY = y - spacing / 2;
+      if (midY >= bottom) {
+        page.drawLine({
+          start: { x: left, y: midY },
+          end: { x: right, y: midY },
+          thickness: lineWeight,
+          color: rgb(r, g, b),
+          opacity: midlineOpacity
+        });
+      }
+    }
+
+    lineIdx++;
   }
 
   if (marginLine && marginLineColor && marginLineWeight && marginLinePosition) {
@@ -706,7 +755,8 @@ function drawSquareGrid(page, config) {
   }
 }
 function drawIsometric(page, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
+          mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
@@ -714,49 +764,61 @@ function drawIsometric(page, config) {
   const [r, g, b] = color;
   const c = rgb(r, g, b);
 
-  const S3 = Math.sqrt(3);
-  const verticalGap = spacing * S3 / 2;
-  const diagHeight = top - bottom;
-  const diagWidth = right - left;
-  const farDist = diagWidth + diagHeight;
+  if (mode === 'lines') {
+    const S3 = Math.sqrt(3);
+    const verticalGap = spacing * S3 / 2;
+    const diagHeight = top - bottom;
+    const diagWidth = right - left;
+    const farDist = diagWidth + diagHeight;
 
-  function clipLine(x1, y1, x2, y2) {
-    let tMin = 0, tMax = 1;
-    const dx = x2 - x1, dy = y2 - y1;
-    function clip(p, q) {
-      if (p === 0) return q >= 0;
-      const t = q / p;
-      if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
-      else { if (t < tMin) return false; if (t < tMax) tMax = t; }
-      return true;
+    function clipLine(x1, y1, x2, y2) {
+      let tMin = 0, tMax = 1;
+      const dx = x2 - x1, dy = y2 - y1;
+      function clip(p, q) {
+        if (p === 0) return q >= 0;
+        const t = q / p;
+        if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
+        else { if (t < tMin) return false; if (t < tMax) tMax = t; }
+        return true;
+      }
+      if (!clip(-dx, x1 - left)) return null;
+      if (!clip(dx, right - x1)) return null;
+      if (!clip(-dy, y1 - bottom)) return null;
+      if (!clip(dy, top - y1)) return null;
+      return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
     }
-    if (!clip(-dx, x1 - left)) return null;
-    if (!clip(dx, right - x1)) return null;
-    if (!clip(-dy, y1 - bottom)) return null;
-    if (!clip(dy, top - y1)) return null;
-    return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
-  }
 
-  function drawClipped(x1, y1, x2, y2) {
-    const clipped = clipLine(x1, y1, x2, y2);
-    if (!clipped) return;
-    const [cx1, cy1, cx2, cy2] = clipped;
-    page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
-  }
+    function drawClipped(x1, y1, x2, y2) {
+      const clipped = clipLine(x1, y1, x2, y2);
+      if (!clipped) return;
+      const [cx1, cy1, cx2, cy2] = clipped;
+      page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
+    }
 
-  // 1. Horizontal lines at verticalGap intervals from top down to bottom
-  for (let y = top; y >= bottom; y -= verticalGap) {
-    drawClipped(left, y, right, y);
-  }
+    // 1. Horizontal lines at verticalGap intervals from top down to bottom
+    for (let y = top; y >= bottom; y -= verticalGap) {
+      drawClipped(left, y, right, y);
+    }
 
-  // 2. +60° lines (slope = +S3 in PDF coords, up-right): anchor at y=bottom
-  // 3. -60° lines (slope = -S3 in PDF coords, down-right): anchor at y=top
-  // Both use same x0 range: [left - diagHeight/S3, right], step = spacing
-  for (let x0 = left - diagHeight / S3; x0 <= right; x0 += spacing) {
-    // +60°: through (x0, bottom) — extend far in both directions, clip handles bounds
-    drawClipped(x0 - farDist, bottom - farDist * S3, x0 + farDist, bottom + farDist * S3);
-    // -60°: through (x0, top) — extend far in both directions, clip handles bounds
-    drawClipped(x0 - farDist, top + farDist * S3, x0 + farDist, top - farDist * S3);
+    // 2. +60° lines and -60° lines
+    for (let x0 = left - diagHeight / S3; x0 <= right; x0 += spacing) {
+      drawClipped(x0 - farDist, bottom - farDist * S3, x0 + farDist, bottom + farDist * S3);
+      drawClipped(x0 - farDist, top + farDist * S3, x0 + farDist, top - farDist * S3);
+    }
+  } else if (mode === 'dots') {
+    // Triangular lattice: even rows at x = left + n*spacing, odd rows offset by spacing/2
+    // verticalGap = spacing * sqrt(3) / 2
+    const S3 = Math.sqrt(3);
+    const verticalGap = spacing * S3 / 2;
+
+    let rowIdx = 0;
+    for (let y = top; y >= bottom; y -= verticalGap) {
+      const xOffset = (rowIdx % 2 === 0) ? 0 : spacing / 2;
+      for (let x = left + xOffset; x <= right; x += spacing) {
+        page.drawCircle({ x, y, size: dotSize, color: c, opacity });
+      }
+      rowIdx++;
+    }
   }
 }
 function drawCornell(page, config) {
@@ -850,20 +912,39 @@ function previewDotGrid(ctx, config) {
 }
 function previewRuled(ctx, config) {
   const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
-          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition } = config;
+          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition,
+          headerLine = false, headerLineWeight,
+          midlines = false } = config;
   const left = marginLeft * scale;
   const right = (paperW - marginRight) * scale;
   const [r, g, b] = color;
+  const midlineOpacity = Math.max(0.05, opacity / 2);
 
-  ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
-  ctx.lineWidth = lineWeight * scale;
-
+  let lineIdx = 0;
   for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
     const cy = canvasHeight - pdfY * scale;
+    const isHeader = headerLine && lineIdx === 0;
+    ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+    ctx.lineWidth = (isHeader ? headerLineWeight : lineWeight) * scale;
     ctx.beginPath();
     ctx.moveTo(left, cy);
     ctx.lineTo(right, cy);
     ctx.stroke();
+
+    if (midlines) {
+      const midPdfY = pdfY - spacing / 2;
+      if (midPdfY >= marginBottom) {
+        const midCy = canvasHeight - midPdfY * scale;
+        ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${midlineOpacity})`;
+        ctx.lineWidth = lineWeight * scale;
+        ctx.beginPath();
+        ctx.moveTo(left, midCy);
+        ctx.lineTo(right, midCy);
+        ctx.stroke();
+      }
+    }
+
+    lineIdx++;
   }
 
   if (marginLine && marginLineColor && marginLineWeight && marginLinePosition) {
@@ -922,7 +1003,8 @@ function previewSquareGrid(ctx, config) {
   }
 }
 function previewIsometric(ctx, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
+          mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
   const [r, g, b] = color;
 
   // Canvas drawable area bounds (PDF top → small canvas y; PDF bottom → large canvas y)
@@ -939,34 +1021,50 @@ function previewIsometric(ctx, config) {
   ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
   ctx.lineWidth = lineWeight * scale;
 
-  const S3 = Math.sqrt(3);
-  const vGap = spacing * S3 / 2 * scale;          // vertical gap between horizontal lines, in canvas px
-  const spacingCanvas = spacing * scale;
-  const diagHeight = cBottom - cTop;               // drawable height in canvas px
-  const diagWidth = cRight - cLeft;
-  const farDist = (diagWidth + diagHeight) * 2;
+  if (mode === 'lines') {
+    const S3 = Math.sqrt(3);
+    const vGap = spacing * S3 / 2 * scale;
+    const spacingCanvas = spacing * scale;
+    const diagHeight = cBottom - cTop;
+    const diagWidth = cRight - cLeft;
+    const farDist = (diagWidth + diagHeight) * 2;
 
-  function drawLine(x1, y1, x2, y2) {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
+    function drawLine(x1, y1, x2, y2) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
 
-  // 1. Horizontal lines: from cTop downward by vGap (canvas y increases downward)
-  for (let cy = cTop; cy <= cBottom; cy += vGap) {
-    drawLine(cLeft, cy, cRight, cy);
-  }
+    // 1. Horizontal lines: from cTop downward by vGap (canvas y increases downward)
+    for (let cy = cTop; cy <= cBottom; cy += vGap) {
+      drawLine(cLeft, cy, cRight, cy);
+    }
 
-  // 2. PDF +60° → canvas slope -S3 (up-right on screen), anchor at (cx0, cBottom)
-  //    cy = cBottom - S3 * (cx - cx0)
-  // 3. PDF -60° → canvas slope +S3 (down-right on screen), anchor at (cx0, cTop)
-  //    cy = cTop + S3 * (cx - cx0)
-  for (let cx0 = cLeft - diagHeight / S3; cx0 <= cRight; cx0 += spacingCanvas) {
-    // +60° PDF (canvas up-right, slope -S3)
-    drawLine(cx0 - farDist, cBottom + farDist * S3, cx0 + farDist, cBottom - farDist * S3);
-    // -60° PDF (canvas down-right, slope +S3)
-    drawLine(cx0 - farDist, cTop - farDist * S3, cx0 + farDist, cTop + farDist * S3);
+    // 2. Diagonal lines
+    for (let cx0 = cLeft - diagHeight / S3; cx0 <= cRight; cx0 += spacingCanvas) {
+      drawLine(cx0 - farDist, cBottom + farDist * S3, cx0 + farDist, cBottom - farDist * S3);
+      drawLine(cx0 - farDist, cTop - farDist * S3, cx0 + farDist, cTop + farDist * S3);
+    }
+  } else if (mode === 'dots') {
+    // Triangular lattice in canvas coordinates
+    const S3 = Math.sqrt(3);
+    const vGap = spacing * S3 / 2 * scale;
+    const spacingCanvas = spacing * scale;
+    const dotRadius = (dotSize / 2) * scale;
+
+    ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+
+    let rowIdx = 0;
+    for (let cy = cTop; cy <= cBottom; cy += vGap) {
+      const xOffset = (rowIdx % 2 === 0) ? 0 : spacingCanvas / 2;
+      for (let cx = cLeft + xOffset; cx <= cRight; cx += spacingCanvas) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      rowIdx++;
+    }
   }
 
   ctx.restore();
@@ -1051,8 +1149,11 @@ function getConfig() {
         return active ? active.dataset.marginRgb.split(',').map(Number) : [0.89, 0.27, 0.27];
       })(),
       marginLineWeight:   parseFloat(document.getElementById('ruled-marginLineWeight').value) * MM,
-      marginLinePosition: parseFloat(document.getElementById('ruled-marginLinePosition').value) * MM,
-    };
+       marginLinePosition: parseFloat(document.getElementById('ruled-marginLinePosition').value) * MM,
+       headerLine:       document.getElementById('ruled-headerLine').checked,
+       headerLineWeight: parseFloat(document.getElementById('ruled-headerLineWeight').value) * MM,
+       midlines:         document.getElementById('ruled-midlines').checked,
+     };
   } else if (type === 'square-grid') {
     params = {
       spacing:      parseFloat(document.getElementById('square-grid-spacing').value)      * MM,
@@ -1073,6 +1174,8 @@ function getConfig() {
       marginRight:  parseFloat(document.getElementById('isometric-marginRight').value)  * MM,
       marginBottom: parseFloat(document.getElementById('isometric-marginBottom').value) * MM,
       marginLeft:   parseFloat(document.getElementById('isometric-marginLeft').value)   * MM,
+      mode:    document.getElementById('isometric-mode').value,
+      dotSize: parseFloat(document.getElementById('isometric-dotSize').value) * MM,
     };
   } else if (type === 'cornell') {
     params = {
@@ -1142,9 +1245,13 @@ function loadPreset(type) {
     document.getElementById('ruled-marginLineWeight').value = preset.marginLineWeight ?? 0.5;
     document.getElementById('ruled-marginLinePosition').value = preset.marginLinePosition ?? 15;
     document.getElementById('ruled-marginLine-controls').style.display = (preset.marginLine ?? false) ? '' : 'none';
-    document.querySelectorAll('.margin-swatch').forEach((s, i) => {
-      s.classList.toggle('active', i === 0);
-    });
+     document.getElementById('ruled-headerLine').checked = preset.headerLine ?? false;
+     document.getElementById('ruled-headerLineWeight').value = preset.headerLineWeight ?? 0.6;
+     document.getElementById('ruled-headerLine-controls').style.display = (preset.headerLine ?? false) ? '' : 'none';
+     document.getElementById('ruled-midlines').checked = preset.midlines ?? false;
+     document.querySelectorAll('.margin-swatch').forEach((s, i) => {
+       s.classList.toggle('active', i === 0);
+     });
   } else if (type === 'square-grid') {
     document.getElementById('square-grid-spacing').value    = preset.spacing;
     document.getElementById('square-grid-lineWeight').value = preset.lineWeight;
@@ -1165,6 +1272,9 @@ function loadPreset(type) {
     document.getElementById('isometric-marginRight').value  = margins[1];
     document.getElementById('isometric-marginBottom').value = margins[2];
     document.getElementById('isometric-marginLeft').value   = margins[3];
+    document.getElementById('isometric-mode').value = preset.mode ?? 'lines';
+    document.getElementById('isometric-dotSize').value = preset.dotSize ?? 0.8;
+    document.getElementById('isometric-dotSize-field').style.display = (preset.mode ?? 'lines') === 'dots' ? '' : 'none';
   } else if (type === 'cornell') {
     document.getElementById('cornell-cueWidth').value       = preset.cueWidth;
     document.getElementById('cornell-summaryHeight').value  = preset.summaryHeight;
@@ -1356,6 +1466,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ruled-marginLine').addEventListener('change', () => {
     const checked = document.getElementById('ruled-marginLine').checked;
     document.getElementById('ruled-marginLine-controls').style.display = checked ? '' : 'none';
+    updatePreview();
+  });
+
+  document.getElementById('ruled-headerLine').addEventListener('change', () => {
+    const checked = document.getElementById('ruled-headerLine').checked;
+    document.getElementById('ruled-headerLine-controls').style.display = checked ? '' : 'none';
+    updatePreview();
+  });
+
+  // Midlines toggle
+  document.getElementById('ruled-midlines').addEventListener('change', () => {
+    updatePreview();
+  });
+
+  // Isometric mode show/hide
+  document.getElementById('isometric-mode').addEventListener('change', () => {
+    const mode = document.getElementById('isometric-mode').value;
+    document.getElementById('isometric-dotSize-field').style.display = mode === 'dots' ? '' : 'none';
     updatePreview();
   });
 
