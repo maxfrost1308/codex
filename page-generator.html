@@ -529,9 +529,9 @@ const PRESETS = {
     a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 }
   }
 };
-const { PDFDocument, PageSizes, rgb } = PDFLib;
+const { PDFDocument, rgb } = PDFLib;
 
-/* Draw stubs — TODO: implement in later tasks */
+/* Draw functions */
 function drawDotGrid(page, config) {
   const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
   const left = marginLeft;
@@ -697,7 +697,7 @@ function drawCornell(page, config) {
   }
 }
 
-/* Preview stubs — TODO: implement in later tasks */
+/* Preview functions */
 function previewDotGrid(ctx, config) {
   const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasWidth, canvasHeight, scale } = config;
   const radius = (dotSize / 2) * scale;
