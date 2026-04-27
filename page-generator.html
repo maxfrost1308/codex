@@ -685,8 +685,8 @@ function drawCornell(page, config) {
     opacity
   });
 
-  // 3. Horizontal ruled lines (full width, from top down to just above summary divider)
-  for (let y = top; y >= summaryY; y -= lineSpacing) {
+  // 3. Horizontal ruled lines (full width, from top down to bottom margin)
+  for (let y = top; y >= marginBottom; y -= lineSpacing) {
     page.drawLine({
       start: { x: left, y },
       end: { x: right, y },
@@ -843,9 +843,9 @@ function previewCornell(ctx, config) {
   ctx.lineTo(right, summaryY);
   ctx.stroke();
 
-  // 3. Ruled lines (full width, from top down to summary divider)
+  // 3. Ruled lines (full width, from top down to bottom margin)
   ctx.lineWidth = lineWeight * scale;
-  for (let pdfY = (paperH - marginTop); pdfY >= (marginBottom + summaryHeight); pdfY -= lineSpacing) {
+  for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= lineSpacing) {
     const cy = canvasHeight - pdfY * scale;
     ctx.beginPath();
     ctx.moveTo(left, cy);
