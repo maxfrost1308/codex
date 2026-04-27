@@ -269,6 +269,39 @@
   .status-text.done { color: var(--success); }
   .status-text.error { color: var(--accent); }
   .hidden { display: none !important; }
+
+  .margin-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .margin-swatch.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  }
+  .margin-swatch:hover {
+    transform: scale(1.15);
+  }
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  .checkbox-field label {
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .margin-palette {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -299,6 +332,15 @@
         <div class="field">
           <label>Dot Size (mm)</label>
           <input type="number" id="dot-grid-dotSize" min="0.3" max="3" step="0.1" value="0.8">
+        </div>
+        <div class="field">
+          <label>Dot Shape</label>
+          <select id="dot-grid-shape" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="circle">Circle (●)</option>
+            <option value="cross">Cross (+)</option>
+            <option value="x">X (×)</option>
+            <option value="square">Square (■)</option>
+          </select>
         </div>
         <div class="field">
           <label>Margin Top (mm)</label>
@@ -347,7 +389,30 @@
         </div>
         <div class="field">
           <label>Margin Left (mm)</label>
-          <input type="number" id="ruled-marginLeft" min="0" max="50" step="1" value="15">
+            <input type="number" id="ruled-marginLeft" min="0" max="50" step="1" value="15">
+          </div>
+      </div>
+      <!-- Margin line controls -->
+      <div class="checkbox-field" style="margin-top: 12px;">
+        <input type="checkbox" id="ruled-marginLine">
+        <label for="ruled-marginLine">Show margin line</label>
+      </div>
+      <div id="ruled-marginLine-controls" style="display:none; margin-top: 8px;">
+        <div class="margin-palette">
+          <button class="margin-swatch active" data-margin-rgb="0.89,0.27,0.27" style="background:#E24444" title="Red"></button>
+          <button class="margin-swatch" data-margin-rgb="0.27,0.47,0.80" style="background:#4477CC" title="Blue"></button>
+          <button class="margin-swatch" data-margin-rgb="0.20,0.20,0.20" style="background:#333333" title="Black"></button>
+          <button class="margin-swatch" data-margin-rgb="0.60,0.60,0.60" style="background:#999999" title="Gray"></button>
+        </div>
+        <div class="config" style="margin-top: 8px; margin-bottom: 0;">
+          <div class="field">
+            <label>Margin Line Weight (mm)</label>
+            <input type="number" id="ruled-marginLineWeight" min="0.2" max="3" step="0.1" value="0.5">
+          </div>
+          <div class="field">
+            <label>Margin Line Position (mm)</label>
+            <input type="number" id="ruled-marginLinePosition" min="5" max="100" step="1" value="15">
+          </div>
         </div>
       </div>
     </div>
@@ -381,6 +446,18 @@
         <div class="field">
           <label>Margin Left (mm)</label>
           <input type="number" id="square-grid-marginLeft" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Major Line Every (N)</label>
+          <input type="number" id="square-grid-majorInterval" min="0" max="20" step="1" value="0">
+        </div>
+        <div class="field" id="square-grid-majorWeight-field" style="display:none">
+          <label>Major Line Weight (mm)</label>
+          <input type="number" id="square-grid-majorWeight" min="0.2" max="4" step="0.1" value="0.5">
+        </div>
+        <div class="field" id="square-grid-majorOpacity-field" style="display:none">
+          <label>Major Line Opacity</label>
+          <input type="number" id="square-grid-majorOpacity" min="0.1" max="1" step="0.05" value="0.7">
         </div>
       </div>
     </div>
@@ -520,9 +597,9 @@ const COLORS = [
   { name: 'Black',      rgb: [0.00, 0.00, 0.00], hex: '#000000' },
 ];
 const PRESETS = {
-  'dot-grid':    { spacing: 5, dotSize: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.5 },
-  'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4 },
-  'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4 },
+  'dot-grid':    { spacing: 5, dotSize: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.5, shape: 'circle' },
+  'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4, marginLine: false, marginLineColor: [0.89, 0.27, 0.27], marginLineWeight: 0.5, marginLinePosition: 15 },
+  'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4, majorInterval: 0, majorWeight: 0.5, majorOpacity: 0.7 },
   'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35 },
   'cornell': {
     letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 },
@@ -533,27 +610,36 @@ const { PDFDocument, rgb } = PDFLib;
 
 /* Draw functions */
 function drawDotGrid(page, config) {
-  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity, shape = 'circle' } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
   const top = paperH - marginTop;
   const [r, g, b] = color;
+  const c = rgb(r, g, b);
+  const armLen = dotSize / 2;
+  const thickness = dotSize * 0.25;
 
   for (let y = top; y >= bottom; y -= spacing) {
     for (let x = left; x <= right; x += spacing) {
-      page.drawCircle({
-        x,
-        y,
-        size: dotSize,
-        color: rgb(r, g, b),
-        opacity
-      });
+      if (shape === 'circle') {
+        page.drawCircle({ x, y, size: dotSize, color: c, opacity });
+      } else if (shape === 'cross') {
+        page.drawLine({ start: { x: x - armLen, y }, end: { x: x + armLen, y }, thickness, color: c, opacity });
+        page.drawLine({ start: { x, y: y - armLen }, end: { x, y: y + armLen }, thickness, color: c, opacity });
+      } else if (shape === 'x') {
+        const d = armLen * Math.SQRT1_2;
+        page.drawLine({ start: { x: x - d, y: y - d }, end: { x: x + d, y: y + d }, thickness, color: c, opacity });
+        page.drawLine({ start: { x: x - d, y: y + d }, end: { x: x + d, y: y - d }, thickness, color: c, opacity });
+      } else if (shape === 'square') {
+        page.drawRectangle({ x: x - dotSize / 2, y: y - dotSize / 2, width: dotSize, height: dotSize, color: c, opacity });
+      }
     }
   }
 }
 function drawRuled(page, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
+          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
@@ -569,9 +655,21 @@ function drawRuled(page, config) {
       opacity
     });
   }
+
+  if (marginLine && marginLineColor && marginLineWeight && marginLinePosition) {
+    const [mr, mg, mb] = marginLineColor;
+    page.drawLine({
+      start: { x: marginLinePosition, y: bottom },
+      end: { x: marginLinePosition, y: top },
+      thickness: marginLineWeight,
+      color: rgb(mr, mg, mb),
+      opacity: 1.0
+    });
+  }
 }
 function drawSquareGrid(page, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
+          majorInterval = 0, majorWeight, majorOpacity } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
@@ -580,25 +678,31 @@ function drawSquareGrid(page, config) {
   const c = rgb(r, g, b);
 
   // Horizontal lines
+  let hIdx = 0;
   for (let y = top; y >= bottom; y -= spacing) {
+    const isMajor = majorInterval > 0 && hIdx % majorInterval === 0;
     page.drawLine({
       start: { x: left, y },
       end: { x: right, y },
-      thickness: lineWeight,
+      thickness: isMajor ? majorWeight : lineWeight,
       color: c,
-      opacity
+      opacity: isMajor ? majorOpacity : opacity
     });
+    hIdx++;
   }
 
   // Vertical lines
+  let vIdx = 0;
   for (let x = left; x <= right; x += spacing) {
+    const isMajor = majorInterval > 0 && vIdx % majorInterval === 0;
     page.drawLine({
       start: { x, y: bottom },
       end: { x, y: top },
-      thickness: lineWeight,
+      thickness: isMajor ? majorWeight : lineWeight,
       color: c,
-      opacity
+      opacity: isMajor ? majorOpacity : opacity
     });
+    vIdx++;
   }
 }
 function drawIsometric(page, config) {
@@ -699,24 +803,54 @@ function drawCornell(page, config) {
 
 /* Preview functions */
 function previewDotGrid(ctx, config) {
-  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasWidth, canvasHeight, scale } = config;
+  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasWidth, canvasHeight, scale, shape = 'circle' } = config;
   const radius = (dotSize / 2) * scale;
   const [r, g, b] = color;
+  const rgba = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  const armLen = radius;
+  const lineWidth = radius * 0.5;
 
-  ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  ctx.fillStyle = rgba;
+  ctx.strokeStyle = rgba;
 
   for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
     const cy = canvasHeight - pdfY * scale;
     for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += spacing) {
       const cx = pdfX * scale;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (shape === 'circle') {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (shape === 'cross') {
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(cx - armLen, cy);
+        ctx.lineTo(cx + armLen, cy);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - armLen);
+        ctx.lineTo(cx, cy + armLen);
+        ctx.stroke();
+      } else if (shape === 'x') {
+        const d = armLen * Math.SQRT1_2;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(cx - d, cy - d);
+        ctx.lineTo(cx + d, cy + d);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - d, cy + d);
+        ctx.lineTo(cx + d, cy - d);
+        ctx.stroke();
+      } else if (shape === 'square') {
+        ctx.fillRect(cx - radius, cy - radius, dotSize * scale, dotSize * scale);
+      }
     }
   }
 }
 function previewRuled(ctx, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
+          marginLine = false, marginLineColor, marginLineWeight, marginLinePosition } = config;
   const left = marginLeft * scale;
   const right = (paperW - marginRight) * scale;
   const [r, g, b] = color;
@@ -731,36 +865,60 @@ function previewRuled(ctx, config) {
     ctx.lineTo(right, cy);
     ctx.stroke();
   }
+
+  if (marginLine && marginLineColor && marginLineWeight && marginLinePosition) {
+    const [mr, mg, mb] = marginLineColor;
+    const cx = marginLinePosition * scale;
+    const cTop = canvasHeight - (paperH - marginTop) * scale;
+    const cBottom = canvasHeight - marginBottom * scale;
+    ctx.strokeStyle = `rgba(${Math.round(mr * 255)}, ${Math.round(mg * 255)}, ${Math.round(mb * 255)}, 1.0)`;
+    ctx.lineWidth = marginLineWeight * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, cTop);
+    ctx.lineTo(cx, cBottom);
+    ctx.stroke();
+  }
 }
 function previewSquareGrid(ctx, config) {
-  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
+          majorInterval = 0, majorWeight, majorOpacity } = config;
   const left = marginLeft * scale;
   const right = (paperW - marginRight) * scale;
   const bottom = marginBottom * scale;
   const top = (paperH - marginTop) * scale;
   const [r, g, b] = color;
 
-  ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
-  ctx.lineWidth = lineWeight * scale;
+  const baseRgba = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  const majorRgba = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${majorOpacity})`;
 
   // Horizontal lines (canvas Y inverted)
+  let hIdx = 0;
   for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
     const cy = canvasHeight - pdfY * scale;
+    const isMajor = majorInterval > 0 && hIdx % majorInterval === 0;
+    ctx.strokeStyle = isMajor ? majorRgba : baseRgba;
+    ctx.lineWidth = (isMajor ? majorWeight : lineWeight) * scale;
     ctx.beginPath();
     ctx.moveTo(left, cy);
     ctx.lineTo(right, cy);
     ctx.stroke();
+    hIdx++;
   }
 
   // Vertical lines
   const canvasBottom = canvasHeight - bottom;
   const canvasTop = canvasHeight - top;
+  let vIdx = 0;
   for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += spacing) {
     const cx = pdfX * scale;
+    const isMajor = majorInterval > 0 && vIdx % majorInterval === 0;
+    ctx.strokeStyle = isMajor ? majorRgba : baseRgba;
+    ctx.lineWidth = (isMajor ? majorWeight : lineWeight) * scale;
     ctx.beginPath();
     ctx.moveTo(cx, canvasTop);
     ctx.lineTo(cx, canvasBottom);
     ctx.stroke();
+    vIdx++;
   }
 }
 function previewIsometric(ctx, config) {
@@ -873,6 +1031,7 @@ function getConfig() {
     params = {
       spacing:      parseFloat(document.getElementById('dot-grid-spacing').value)      * MM,
       dotSize:      parseFloat(document.getElementById('dot-grid-dotSize').value)      * MM,
+      shape:        document.getElementById('dot-grid-shape').value,
       marginTop:    parseFloat(document.getElementById('dot-grid-marginTop').value)    * MM,
       marginRight:  parseFloat(document.getElementById('dot-grid-marginRight').value)  * MM,
       marginBottom: parseFloat(document.getElementById('dot-grid-marginBottom').value) * MM,
@@ -886,6 +1045,13 @@ function getConfig() {
       marginRight:  parseFloat(document.getElementById('ruled-marginRight').value)  * MM,
       marginBottom: parseFloat(document.getElementById('ruled-marginBottom').value) * MM,
       marginLeft:   parseFloat(document.getElementById('ruled-marginLeft').value)   * MM,
+      marginLine:         document.getElementById('ruled-marginLine').checked,
+      marginLineColor:    (() => {
+        const active = document.querySelector('.margin-swatch.active');
+        return active ? active.dataset.marginRgb.split(',').map(Number) : [0.89, 0.27, 0.27];
+      })(),
+      marginLineWeight:   parseFloat(document.getElementById('ruled-marginLineWeight').value) * MM,
+      marginLinePosition: parseFloat(document.getElementById('ruled-marginLinePosition').value) * MM,
     };
   } else if (type === 'square-grid') {
     params = {
@@ -895,6 +1061,9 @@ function getConfig() {
       marginRight:  parseFloat(document.getElementById('square-grid-marginRight').value)  * MM,
       marginBottom: parseFloat(document.getElementById('square-grid-marginBottom').value) * MM,
       marginLeft:   parseFloat(document.getElementById('square-grid-marginLeft').value)   * MM,
+      majorInterval: parseInt(document.getElementById('square-grid-majorInterval').value) || 0,
+      majorWeight:   parseFloat(document.getElementById('square-grid-majorWeight').value)   * MM,
+      majorOpacity:  parseFloat(document.getElementById('square-grid-majorOpacity').value),
     };
   } else if (type === 'isometric') {
     params = {
@@ -961,6 +1130,7 @@ function loadPreset(type) {
     document.getElementById('dot-grid-marginRight').value  = margins[1];
     document.getElementById('dot-grid-marginBottom').value = margins[2];
     document.getElementById('dot-grid-marginLeft').value   = margins[3];
+    document.getElementById('dot-grid-shape').value = preset.shape ?? 'circle';
   } else if (type === 'ruled') {
     document.getElementById('ruled-spacing').value     = preset.spacing;
     document.getElementById('ruled-lineWeight').value  = preset.lineWeight;
@@ -968,6 +1138,13 @@ function loadPreset(type) {
     document.getElementById('ruled-marginRight').value  = margins[1];
     document.getElementById('ruled-marginBottom').value = margins[2];
     document.getElementById('ruled-marginLeft').value   = margins[3];
+    document.getElementById('ruled-marginLine').checked = preset.marginLine ?? false;
+    document.getElementById('ruled-marginLineWeight').value = preset.marginLineWeight ?? 0.5;
+    document.getElementById('ruled-marginLinePosition').value = preset.marginLinePosition ?? 15;
+    document.getElementById('ruled-marginLine-controls').style.display = (preset.marginLine ?? false) ? '' : 'none';
+    document.querySelectorAll('.margin-swatch').forEach((s, i) => {
+      s.classList.toggle('active', i === 0);
+    });
   } else if (type === 'square-grid') {
     document.getElementById('square-grid-spacing').value    = preset.spacing;
     document.getElementById('square-grid-lineWeight').value = preset.lineWeight;
@@ -975,6 +1152,12 @@ function loadPreset(type) {
     document.getElementById('square-grid-marginRight').value  = margins[1];
     document.getElementById('square-grid-marginBottom').value = margins[2];
     document.getElementById('square-grid-marginLeft').value   = margins[3];
+    document.getElementById('square-grid-majorInterval').value = preset.majorInterval ?? 0;
+    document.getElementById('square-grid-majorWeight').value   = preset.majorWeight ?? 0.5;
+    document.getElementById('square-grid-majorOpacity').value  = preset.majorOpacity ?? 0.7;
+    const majorIntervalVal = parseInt(preset.majorInterval ?? 0);
+    document.getElementById('square-grid-majorWeight-field').style.display = majorIntervalVal > 0 ? '' : 'none';
+    document.getElementById('square-grid-majorOpacity-field').style.display = majorIntervalVal > 0 ? '' : 'none';
   } else if (type === 'isometric') {
     document.getElementById('isometric-spacing').value    = preset.spacing;
     document.getElementById('isometric-lineWeight').value = preset.lineWeight;
@@ -1155,6 +1338,32 @@ document.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('input', () => {
       clearTimeout(previewTimer);
       previewTimer = setTimeout(updatePreview, 100);
+    });
+  });
+
+  // Major interval show/hide
+  document.getElementById('square-grid-majorInterval').addEventListener('input', () => {
+    const val = parseInt(document.getElementById('square-grid-majorInterval').value) || 0;
+    document.getElementById('square-grid-majorWeight-field').style.display = val > 0 ? '' : 'none';
+    document.getElementById('square-grid-majorOpacity-field').style.display = val > 0 ? '' : 'none';
+  });
+
+  // Dot shape change
+  document.getElementById('dot-grid-shape').addEventListener('change', () => {
+    updatePreview();
+  });
+
+  document.getElementById('ruled-marginLine').addEventListener('change', () => {
+    const checked = document.getElementById('ruled-marginLine').checked;
+    document.getElementById('ruled-marginLine-controls').style.display = checked ? '' : 'none';
+    updatePreview();
+  });
+
+  document.querySelectorAll('.margin-swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('.margin-swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      updatePreview();
     });
   });
 
