@@ -854,11 +854,245 @@ function previewCornell(ctx, config) {
   }
 }
 
-/* Utility stubs — TODO: implement in T7 */
-async function generatePDF() { /* TODO: implement in T7 */ }
-function updatePreview() { /* TODO: implement in T7 */ }
-function getConfig() { /* TODO: implement in T7 */ }
-function loadPreset(type) { /* TODO: implement in T7 */ }
+/* ── getConfig ── reads form state, returns config with mm→pt conversion ── */
+function getConfig() {
+  const activeTab = document.querySelector('.tab.active');
+  const type = activeTab.dataset.type;
+
+  const paperSizeKey = document.querySelector('.paper-btn.active').dataset.size;
+  const paper = PAPER_SIZES[paperSizeKey];
+
+  const activeSwatch = document.querySelector('.swatch.active');
+  const colorRgb = activeSwatch.dataset.rgb.split(',').map(Number);
+
+  const opacity = parseFloat(document.getElementById('opacitySlider').value);
+  const pageCount = parseInt(document.getElementById('pageCount').value, 10);
+
+  let params = {};
+  if (type === 'dot-grid') {
+    params = {
+      spacing:      parseFloat(document.getElementById('dot-grid-spacing').value)      * MM,
+      dotSize:      parseFloat(document.getElementById('dot-grid-dotSize').value)      * MM,
+      marginTop:    parseFloat(document.getElementById('dot-grid-marginTop').value)    * MM,
+      marginRight:  parseFloat(document.getElementById('dot-grid-marginRight').value)  * MM,
+      marginBottom: parseFloat(document.getElementById('dot-grid-marginBottom').value) * MM,
+      marginLeft:   parseFloat(document.getElementById('dot-grid-marginLeft').value)   * MM,
+    };
+  } else if (type === 'ruled') {
+    params = {
+      spacing:      parseFloat(document.getElementById('ruled-spacing').value)      * MM,
+      lineWeight:   parseFloat(document.getElementById('ruled-lineWeight').value)   * MM,
+      marginTop:    parseFloat(document.getElementById('ruled-marginTop').value)    * MM,
+      marginRight:  parseFloat(document.getElementById('ruled-marginRight').value)  * MM,
+      marginBottom: parseFloat(document.getElementById('ruled-marginBottom').value) * MM,
+      marginLeft:   parseFloat(document.getElementById('ruled-marginLeft').value)   * MM,
+    };
+  } else if (type === 'square-grid') {
+    params = {
+      spacing:      parseFloat(document.getElementById('square-grid-spacing').value)      * MM,
+      lineWeight:   parseFloat(document.getElementById('square-grid-lineWeight').value)   * MM,
+      marginTop:    parseFloat(document.getElementById('square-grid-marginTop').value)    * MM,
+      marginRight:  parseFloat(document.getElementById('square-grid-marginRight').value)  * MM,
+      marginBottom: parseFloat(document.getElementById('square-grid-marginBottom').value) * MM,
+      marginLeft:   parseFloat(document.getElementById('square-grid-marginLeft').value)   * MM,
+    };
+  } else if (type === 'isometric') {
+    params = {
+      spacing:      parseFloat(document.getElementById('isometric-spacing').value)      * MM,
+      lineWeight:   parseFloat(document.getElementById('isometric-lineWeight').value)   * MM,
+      marginTop:    parseFloat(document.getElementById('isometric-marginTop').value)    * MM,
+      marginRight:  parseFloat(document.getElementById('isometric-marginRight').value)  * MM,
+      marginBottom: parseFloat(document.getElementById('isometric-marginBottom').value) * MM,
+      marginLeft:   parseFloat(document.getElementById('isometric-marginLeft').value)   * MM,
+    };
+  } else if (type === 'cornell') {
+    params = {
+      cueWidth:       parseFloat(document.getElementById('cornell-cueWidth').value)       * MM,
+      summaryHeight:  parseFloat(document.getElementById('cornell-summaryHeight').value)  * MM,
+      lineSpacing:    parseFloat(document.getElementById('cornell-lineSpacing').value)    * MM,
+      lineWeight:     parseFloat(document.getElementById('cornell-lineWeight').value)     * MM,
+      dividerWeight:  parseFloat(document.getElementById('cornell-dividerWeight').value)  * MM,
+      marginTop:      parseFloat(document.getElementById('cornell-marginTop').value)      * MM,
+      marginRight:    parseFloat(document.getElementById('cornell-marginRight').value)    * MM,
+      marginBottom:   parseFloat(document.getElementById('cornell-marginBottom').value)   * MM,
+      marginLeft:     parseFloat(document.getElementById('cornell-marginLeft').value)     * MM,
+    };
+  }
+
+  return {
+    type,
+    paperW: paper.w,
+    paperH: paper.h,
+    paperName: paper.name,
+    paperSizeKey,
+    color: colorRgb,
+    opacity,
+    pageCount,
+    ...params
+  };
+}
+
+/* ── loadPreset ── populates form inputs from PRESETS ── */
+function loadPreset(type) {
+  let preset;
+  if (type === 'cornell') {
+    const sizeKey = document.querySelector('.paper-btn.active').dataset.size;
+    preset = PRESETS.cornell[sizeKey];
+  } else {
+    preset = PRESETS[type];
+  }
+  if (!preset) return;
+
+  // Color swatch
+  document.querySelectorAll('.swatch').forEach((s, i) => {
+    s.classList.toggle('active', i === preset.color);
+  });
+
+  // Opacity
+  document.getElementById('opacitySlider').value = preset.opacity;
+  document.getElementById('opacityLabel').textContent = preset.opacity.toFixed(2);
+
+  const margins = preset.margins; // [top, right, bottom, left]
+
+  if (type === 'dot-grid') {
+    document.getElementById('dot-grid-spacing').value  = preset.spacing;
+    document.getElementById('dot-grid-dotSize').value  = preset.dotSize;
+    document.getElementById('dot-grid-marginTop').value    = margins[0];
+    document.getElementById('dot-grid-marginRight').value  = margins[1];
+    document.getElementById('dot-grid-marginBottom').value = margins[2];
+    document.getElementById('dot-grid-marginLeft').value   = margins[3];
+  } else if (type === 'ruled') {
+    document.getElementById('ruled-spacing').value     = preset.spacing;
+    document.getElementById('ruled-lineWeight').value  = preset.lineWeight;
+    document.getElementById('ruled-marginTop').value    = margins[0];
+    document.getElementById('ruled-marginRight').value  = margins[1];
+    document.getElementById('ruled-marginBottom').value = margins[2];
+    document.getElementById('ruled-marginLeft').value   = margins[3];
+  } else if (type === 'square-grid') {
+    document.getElementById('square-grid-spacing').value    = preset.spacing;
+    document.getElementById('square-grid-lineWeight').value = preset.lineWeight;
+    document.getElementById('square-grid-marginTop').value    = margins[0];
+    document.getElementById('square-grid-marginRight').value  = margins[1];
+    document.getElementById('square-grid-marginBottom').value = margins[2];
+    document.getElementById('square-grid-marginLeft').value   = margins[3];
+  } else if (type === 'isometric') {
+    document.getElementById('isometric-spacing').value    = preset.spacing;
+    document.getElementById('isometric-lineWeight').value = preset.lineWeight;
+    document.getElementById('isometric-marginTop').value    = margins[0];
+    document.getElementById('isometric-marginRight').value  = margins[1];
+    document.getElementById('isometric-marginBottom').value = margins[2];
+    document.getElementById('isometric-marginLeft').value   = margins[3];
+  } else if (type === 'cornell') {
+    document.getElementById('cornell-cueWidth').value       = preset.cueWidth;
+    document.getElementById('cornell-summaryHeight').value  = preset.summaryHeight;
+    document.getElementById('cornell-lineSpacing').value    = preset.lineSpacing;
+    document.getElementById('cornell-lineWeight').value     = preset.lineWeight;
+    document.getElementById('cornell-dividerWeight').value  = preset.dividerWeight;
+    document.getElementById('cornell-marginTop').value    = margins[0];
+    document.getElementById('cornell-marginRight').value  = margins[1];
+    document.getElementById('cornell-marginBottom').value = margins[2];
+    document.getElementById('cornell-marginLeft').value   = margins[3];
+  }
+}
+
+/* ── updatePreview ── renders canvas with correct aspect ratio ── */
+function updatePreview() {
+  const config = getConfig();
+  const canvas = document.getElementById('previewCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const canvasWidth = 340;
+  const canvasHeight = Math.round(canvasWidth * (config.paperH / config.paperW));
+  canvas.width  = canvasWidth;
+  canvas.height = canvasHeight;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  const scale = canvasWidth / config.paperW;
+  const previewConfig = { ...config, canvasWidth, canvasHeight, scale };
+
+  if (config.type === 'dot-grid')    previewDotGrid(ctx, previewConfig);
+  else if (config.type === 'ruled')       previewRuled(ctx, previewConfig);
+  else if (config.type === 'square-grid') previewSquareGrid(ctx, previewConfig);
+  else if (config.type === 'isometric')   previewIsometric(ctx, previewConfig);
+  else if (config.type === 'cornell')     previewCornell(ctx, previewConfig);
+}
+
+/* ── generatePDF ── full async pipeline ── */
+async function generatePDF() {
+  const generateBtn       = document.getElementById('generateBtn');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressFill      = document.getElementById('progressFill');
+  const statusText        = document.getElementById('statusText');
+
+  generateBtn.disabled = true;
+  progressContainer.classList.remove('hidden');
+  statusText.textContent = 'Preparing...';
+  statusText.className   = 'status-text';
+  progressFill.style.width = '0%';
+
+  try {
+    const config = getConfig();
+
+    // Validate margins
+    if (config.marginTop + config.marginBottom >= config.paperH) {
+      alert('Top + Bottom margins exceed page height. Please reduce them.');
+      return;
+    }
+    if (config.marginLeft + config.marginRight >= config.paperW) {
+      alert('Left + Right margins exceed page width. Please reduce them.');
+      return;
+    }
+
+    // Validate page count
+    const pageCount = config.pageCount;
+    if (isNaN(pageCount) || pageCount < 1 || pageCount > 200) {
+      alert('Page count must be between 1 and 200.');
+      return;
+    }
+
+    // Validate spacing
+    const checkSpacing = config.type === 'cornell' ? config.lineSpacing : config.spacing;
+    if (checkSpacing / MM < 3) {
+      alert('Spacing must be at least 3mm.');
+      return;
+    }
+
+    const pdfDoc = await PDFDocument.create();
+
+    for (let i = 0; i < pageCount; i++) {
+      const page = pdfDoc.addPage([config.paperW, config.paperH]);
+
+      if (config.type === 'dot-grid')         drawDotGrid(page, config);
+      else if (config.type === 'ruled')        drawRuled(page, config);
+      else if (config.type === 'square-grid')  drawSquareGrid(page, config);
+      else if (config.type === 'isometric')    drawIsometric(page, config);
+      else if (config.type === 'cornell')      drawCornell(page, config);
+
+      progressFill.style.width = `${((i + 1) / pageCount * 100).toFixed(0)}%`;
+      statusText.textContent   = `Processing page ${i + 1} of ${pageCount}...`;
+
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    statusText.textContent = 'Saving PDF...';
+    const bytes = await pdfDoc.save();
+
+    const filename = `${config.type}-${config.paperSizeKey}-${pageCount}p.pdf`;
+    downloadBlob(bytes, filename, 'application/pdf');
+
+    statusText.textContent = `Done! ${pageCount} page${pageCount > 1 ? 's' : ''} generated.`;
+    statusText.className   = 'status-text done';
+
+  } catch (err) {
+    statusText.textContent = 'Error: ' + err.message;
+    statusText.className   = 'status-text error';
+    console.error(err);
+  } finally {
+    generateBtn.disabled = false;
+  }
+}
 
 /* downloadBlob — fully implemented */
 function downloadBlob(bytes, filename, mime) {
@@ -871,7 +1105,7 @@ function downloadBlob(bytes, filename, mime) {
   URL.revokeObjectURL(url);
 }
 
-/* Event listeners */
+/* ── Event wiring (T7) ── */
 document.addEventListener('DOMContentLoaded', () => {
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {
@@ -882,14 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const type = tab.dataset.type;
       document.getElementById('panel-' + type).classList.add('active');
       loadPreset(type);
-    });
-  });
-
-  // Swatch selection
-  document.querySelectorAll('.swatch').forEach(swatch => {
-    swatch.addEventListener('click', () => {
-      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-      swatch.classList.add('active');
+      updatePreview();
     });
   });
 
@@ -898,11 +1125,45 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.paper-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const activeType = document.querySelector('.tab.active').dataset.type;
+      if (activeType === 'cornell') loadPreset('cornell');
+      updatePreview();
+    });
+  });
+
+  // Color swatch selection
+  document.querySelectorAll('.swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      updatePreview();
+    });
+  });
+
+  // Opacity slider — update label + debounced preview
+  let previewTimer;
+  const opacitySlider = document.getElementById('opacitySlider');
+  const opacityLabel  = document.getElementById('opacityLabel');
+  opacitySlider.addEventListener('input', () => {
+    opacityLabel.textContent = parseFloat(opacitySlider.value).toFixed(2);
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(updatePreview, 100);
+  });
+
+  // All number inputs — debounced preview
+  document.querySelectorAll('input[type="number"]').forEach(input => {
+    input.addEventListener('input', () => {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(updatePreview, 100);
     });
   });
 
   // Generate button
   document.getElementById('generateBtn').addEventListener('click', generatePDF);
+
+  // Initialize: Dot Grid tab active, load preset, render preview
+  loadPreset('dot-grid');
+  updatePreview();
 });
 </script>
 </body>
