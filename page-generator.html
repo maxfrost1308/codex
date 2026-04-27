@@ -308,7 +308,7 @@
 <div class="app">
   <header>
     <h1>Page Generator</h1>
-    <p>Generate printable pages with dot-grid, ruled, square grid, isometric, and Cornell notes patterns.</p>
+    <p>Generate printable pages with dot-grid, ruled, square grid, isometric, hex grid, and Cornell notes patterns.</p>
   </header>
 
   <!-- Page type tabs -->
@@ -318,6 +318,7 @@
     <button class="tab" data-type="square-grid">Square Grid</button>
     <button class="tab" data-type="isometric">Isometric</button>
     <button class="tab" data-type="cornell">Cornell Notes</button>
+    <button class="tab" data-type="hex-grid">Hex Grid</button>
   </div>
 
   <!-- Dot Grid Panel -->
@@ -587,6 +588,57 @@
     </div>
   </div>
 
+  <!-- Hex Grid Panel -->
+  <div class="tab-content" id="panel-hex-grid">
+    <div class="panel">
+      <h3>Hex Grid Settings</h3>
+      <div class="config">
+        <div class="field">
+          <label>Spacing (mm)</label>
+          <input type="number" id="hex-grid-spacing" min="3" max="20" step="0.5" value="7">
+        </div>
+        <div class="field">
+          <label>Line Weight (mm)</label>
+          <input type="number" id="hex-grid-lineWeight" min="0.1" max="2" step="0.1" value="0.25">
+        </div>
+        <div class="field">
+          <label>Margin Top (mm)</label>
+          <input type="number" id="hex-grid-marginTop" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Margin Right (mm)</label>
+          <input type="number" id="hex-grid-marginRight" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Margin Bottom (mm)</label>
+          <input type="number" id="hex-grid-marginBottom" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Margin Left (mm)</label>
+          <input type="number" id="hex-grid-marginLeft" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>Orientation</label>
+          <select id="hex-grid-orientation" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="flat-top" selected>Flat Top</option>
+            <option value="pointy-top">Pointy Top</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Mode</label>
+          <select id="hex-grid-mode" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="lines" selected>Lines</option>
+            <option value="dots">Dots</option>
+          </select>
+        </div>
+        <div class="field" id="hex-grid-dotSize-field" style="display:none">
+          <label>Dot Size (mm)</label>
+          <input type="number" id="hex-grid-dotSize" min="0.3" max="3" step="0.1" value="0.8">
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Paper size toggle -->
   <div class="paper-toggle">
     <button class="paper-btn active" data-size="letter">Letter</button>
@@ -647,6 +699,7 @@ const PRESETS = {
   'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4, marginLine: false, marginLineColor: [0.89, 0.27, 0.27], marginLineWeight: 0.5, marginLinePosition: 15, headerLine: false, headerLineWeight: 0.6, midlines: false },
   'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4, majorInterval: 0, majorWeight: 0.5, majorOpacity: 0.7 },
   'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, mode: 'lines', dotSize: 0.8 },
+  'hex-grid':    { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, orientation: 'flat-top', mode: 'lines', dotSize: 0.8 },
   'cornell': {
     letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 },
     a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 }
@@ -835,6 +888,99 @@ function drawIsometric(page, config) {
         page.drawCircle({ x, y, size: dotSize, color: c, opacity });
       }
       rowIdx++;
+    }
+  }
+}
+function drawHexGrid(page, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
+          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const bottom = marginBottom;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+  const c = rgb(r, g, b);
+  const R = spacing;
+
+  if (mode === 'lines') {
+    function clipLine(x1, y1, x2, y2) {
+      let tMin = 0, tMax = 1;
+      const dx = x2 - x1, dy = y2 - y1;
+      function clip(p, q) {
+        if (p === 0) return q >= 0;
+        const t = q / p;
+        if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
+        else { if (t < tMin) return false; if (t < tMax) tMax = t; }
+        return true;
+      }
+      if (!clip(-dx, x1 - left)) return null;
+      if (!clip(dx, right - x1)) return null;
+      if (!clip(-dy, y1 - bottom)) return null;
+      if (!clip(dy, top - y1)) return null;
+      return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
+    }
+
+    function drawClipped(x1, y1, x2, y2) {
+      const clipped = clipLine(x1, y1, x2, y2);
+      if (!clipped) return;
+      const [cx1, cy1, cx2, cy2] = clipped;
+      page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
+    }
+
+    if (orientation === 'flat-top') {
+      const colStep = 1.5 * R;
+      const rowStep = Math.sqrt(3) * R;
+      let colIdx = 0;
+      for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
+        const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
+        for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
+          for (let k = 0; k < 6; k++) {
+            const vx1 = cx + R * Math.cos(k * Math.PI / 3);
+            const vy1 = cy + R * Math.sin(k * Math.PI / 3);
+            const vx2 = cx + R * Math.cos((k + 1) * Math.PI / 3);
+            const vy2 = cy + R * Math.sin((k + 1) * Math.PI / 3);
+            drawClipped(vx1, vy1, vx2, vy2);
+          }
+        }
+      }
+    } else {
+      const rowStep = 1.5 * R;
+      const colStep = Math.sqrt(3) * R;
+      let rowIdx = 0;
+      for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
+        const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
+        for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
+          for (let k = 0; k < 6; k++) {
+            const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
+            const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
+            const vx2 = cx + R * Math.cos(Math.PI / 6 + (k + 1) * Math.PI / 3);
+            const vy2 = cy + R * Math.sin(Math.PI / 6 + (k + 1) * Math.PI / 3);
+            drawClipped(vx1, vy1, vx2, vy2);
+          }
+        }
+      }
+    }
+  } else if (mode === 'dots') {
+    const S3 = Math.sqrt(3);
+    if (orientation === 'flat-top') {
+      const verticalGap = R * S3 / 2;
+      let rowIdx = 0;
+      for (let y = top; y >= bottom; y -= verticalGap) {
+        const xOffset = (rowIdx % 2 === 0) ? 0 : R / 2;
+        for (let x = left + xOffset; x <= right; x += R) {
+          page.drawCircle({ x, y, size: dotSize, color: c, opacity });
+        }
+        rowIdx++;
+      }
+    } else {
+      const horizontalGap = S3 * R / 2;
+      let colIdx = 0;
+      for (let x = left; x <= right; x += horizontalGap, colIdx++) {
+        const yOffset = (colIdx % 2 === 1) ? R / 2 : 0;
+        for (let y = bottom + yOffset; y <= top; y += R) {
+          page.drawCircle({ x, y, size: dotSize, color: c, opacity });
+        }
+      }
     }
   }
 }
@@ -1117,6 +1263,96 @@ function previewIsometric(ctx, config) {
 
   ctx.restore();
 }
+function previewHexGrid(ctx, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
+          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
+  const [r, g, b] = color;
+
+  const cLeft = marginLeft * scale;
+  const cRight = (paperW - marginRight) * scale;
+  const cBottom = canvasHeight - marginBottom * scale;
+  const cTop = canvasHeight - (paperH - marginTop) * scale;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cLeft, cTop, cRight - cLeft, cBottom - cTop);
+  ctx.clip();
+
+  const R = spacing;
+  const Rc = R * scale;
+
+  if (mode === 'lines') {
+    ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+    ctx.lineWidth = lineWeight * scale;
+
+    if (orientation === 'flat-top') {
+      const colStep = 1.5 * Rc;
+      const rowStep = Math.sqrt(3) * Rc;
+      let colIdx = 0;
+      for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
+        const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
+        for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) {
+            const vx = cx + Rc * Math.cos(k * Math.PI / 3);
+            const vy = cy + Rc * Math.sin(k * Math.PI / 3);
+            if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+    } else {
+      const rowStep = 1.5 * Rc;
+      const colStep = Math.sqrt(3) * Rc;
+      let rowIdx = 0;
+      for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
+        const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
+        for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) {
+            const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
+            const vy = cy + Rc * Math.sin(Math.PI / 6 + k * Math.PI / 3);
+            if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+    }
+  } else if (mode === 'dots') {
+    const S3 = Math.sqrt(3);
+    const dotRadius = dotSize / 2 * scale;
+    ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+
+    if (orientation === 'flat-top') {
+      const vGap = Rc * S3 / 2;
+      let rowIdx = 0;
+      for (let cy = cTop; cy <= cBottom; cy += vGap) {
+        const xOffset = (rowIdx % 2 === 0) ? 0 : Rc / 2;
+        for (let cx = cLeft + xOffset; cx <= cRight; cx += Rc) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        rowIdx++;
+      }
+    } else {
+      const horizontalGap = S3 * Rc / 2;
+      let colIdx = 0;
+      for (let cx = cLeft; cx <= cRight; cx += horizontalGap, colIdx++) {
+        const yOffset = (colIdx % 2 === 1) ? Rc / 2 : 0;
+        for (let cy = cTop + yOffset; cy <= cBottom; cy += Rc) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  ctx.restore();
+}
 function previewCornell(ctx, config) {
   const { paperW, paperH, cueWidth, summaryHeight, lineSpacing, lineWeight, dividerWeight,
           marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
@@ -1260,6 +1496,18 @@ function getConfig() {
       mode:    document.getElementById('isometric-mode').value,
       dotSize: parseFloat(document.getElementById('isometric-dotSize').value) * MM,
     };
+  } else if (type === 'hex-grid') {
+    params = {
+      spacing:      parseFloat(document.getElementById('hex-grid-spacing').value)      * MM,
+      lineWeight:   parseFloat(document.getElementById('hex-grid-lineWeight').value)   * MM,
+      marginTop:    parseFloat(document.getElementById('hex-grid-marginTop').value)    * MM,
+      marginRight:  parseFloat(document.getElementById('hex-grid-marginRight').value)  * MM,
+      marginBottom: parseFloat(document.getElementById('hex-grid-marginBottom').value) * MM,
+      marginLeft:   parseFloat(document.getElementById('hex-grid-marginLeft').value)   * MM,
+      orientation:  document.getElementById('hex-grid-orientation').value,
+      mode:         document.getElementById('hex-grid-mode').value,
+      dotSize:      parseFloat(document.getElementById('hex-grid-dotSize').value)      * MM,
+    };
   } else if (type === 'cornell') {
     params = {
       cueWidth:       parseFloat(document.getElementById('cornell-cueWidth').value)       * MM,
@@ -1361,6 +1609,17 @@ function loadPreset(type) {
     document.getElementById('isometric-mode').value = preset.mode ?? 'lines';
     document.getElementById('isometric-dotSize').value = preset.dotSize ?? 0.8;
     document.getElementById('isometric-dotSize-field').style.display = (preset.mode ?? 'lines') === 'dots' ? '' : 'none';
+  } else if (type === 'hex-grid') {
+    document.getElementById('hex-grid-spacing').value    = preset.spacing;
+    document.getElementById('hex-grid-lineWeight').value = preset.lineWeight;
+    document.getElementById('hex-grid-marginTop').value    = margins[0];
+    document.getElementById('hex-grid-marginRight').value  = margins[1];
+    document.getElementById('hex-grid-marginBottom').value = margins[2];
+    document.getElementById('hex-grid-marginLeft').value   = margins[3];
+    document.getElementById('hex-grid-orientation').value = preset.orientation ?? 'flat-top';
+    document.getElementById('hex-grid-mode').value = preset.mode ?? 'lines';
+    document.getElementById('hex-grid-dotSize').value = preset.dotSize ?? 0.8;
+    document.getElementById('hex-grid-dotSize-field').style.display = (preset.mode ?? 'lines') === 'dots' ? '' : 'none';
   } else if (type === 'cornell') {
     document.getElementById('cornell-cueWidth').value       = preset.cueWidth;
     document.getElementById('cornell-summaryHeight').value  = preset.summaryHeight;
@@ -1402,6 +1661,7 @@ function updatePreview() {
   else if (config.type === 'ruled')       previewRuled(ctx, previewConfig);
   else if (config.type === 'square-grid') previewSquareGrid(ctx, previewConfig);
   else if (config.type === 'isometric')   previewIsometric(ctx, previewConfig);
+  else if (config.type === 'hex-grid')    previewHexGrid(ctx, previewConfig);
   else if (config.type === 'cornell')     previewCornell(ctx, previewConfig);
 }
 
@@ -1454,6 +1714,7 @@ async function generatePDF() {
       else if (config.type === 'ruled')        drawRuled(page, config);
       else if (config.type === 'square-grid')  drawSquareGrid(page, config);
       else if (config.type === 'isometric')    drawIsometric(page, config);
+      else if (config.type === 'hex-grid')     drawHexGrid(page, config);
       else if (config.type === 'cornell')      drawCornell(page, config);
 
       progressFill.style.width = `${((i + 1) / pageCount * 100).toFixed(0)}%`;
@@ -1577,6 +1838,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('isometric-mode').addEventListener('change', () => {
     const mode = document.getElementById('isometric-mode').value;
     document.getElementById('isometric-dotSize-field').style.display = mode === 'dots' ? '' : 'none';
+    updatePreview();
+  });
+
+  // Hex-grid mode show/hide + orientation change
+  document.getElementById('hex-grid-mode').addEventListener('change', () => {
+    const mode = document.getElementById('hex-grid-mode').value;
+    document.getElementById('hex-grid-dotSize-field').style.display = mode === 'dots' ? '' : 'none';
+    updatePreview();
+  });
+
+  document.getElementById('hex-grid-orientation').addEventListener('change', () => {
     updatePreview();
   });
 
