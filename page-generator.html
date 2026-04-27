@@ -532,18 +532,327 @@ const PRESETS = {
 const { PDFDocument, PageSizes, rgb } = PDFLib;
 
 /* Draw stubs — TODO: implement in later tasks */
-function drawDotGrid(page, config) { /* TODO: implement in T2 */ }
-function drawRuled(page, config) { /* TODO: implement in T3 */ }
-function drawSquareGrid(page, config) { /* TODO: implement in T4 */ }
-function drawIsometric(page, config) { /* TODO: implement in T5 */ }
-function drawCornell(page, config) { /* TODO: implement in T6 */ }
+function drawDotGrid(page, config) {
+  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const bottom = marginBottom;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+
+  for (let y = top; y >= bottom; y -= spacing) {
+    for (let x = left; x <= right; x += spacing) {
+      page.drawCircle({
+        x,
+        y,
+        size: dotSize,
+        color: rgb(r, g, b),
+        opacity
+      });
+    }
+  }
+}
+function drawRuled(page, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const bottom = marginBottom;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+
+  for (let y = top; y >= bottom; y -= spacing) {
+    page.drawLine({
+      start: { x: left, y },
+      end: { x: right, y },
+      thickness: lineWeight,
+      color: rgb(r, g, b),
+      opacity
+    });
+  }
+}
+function drawSquareGrid(page, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const bottom = marginBottom;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+  const c = rgb(r, g, b);
+
+  // Horizontal lines
+  for (let y = top; y >= bottom; y -= spacing) {
+    page.drawLine({
+      start: { x: left, y },
+      end: { x: right, y },
+      thickness: lineWeight,
+      color: c,
+      opacity
+    });
+  }
+
+  // Vertical lines
+  for (let x = left; x <= right; x += spacing) {
+    page.drawLine({
+      start: { x, y: bottom },
+      end: { x, y: top },
+      thickness: lineWeight,
+      color: c,
+      opacity
+    });
+  }
+}
+function drawIsometric(page, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const bottom = marginBottom;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+  const c = rgb(r, g, b);
+
+  const S3 = Math.sqrt(3);
+  const verticalGap = spacing * S3 / 2;
+  const diagHeight = top - bottom;
+  const diagWidth = right - left;
+  const farDist = diagWidth + diagHeight;
+
+  function clipLine(x1, y1, x2, y2) {
+    let tMin = 0, tMax = 1;
+    const dx = x2 - x1, dy = y2 - y1;
+    function clip(p, q) {
+      if (p === 0) return q >= 0;
+      const t = q / p;
+      if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
+      else { if (t < tMin) return false; if (t < tMax) tMax = t; }
+      return true;
+    }
+    if (!clip(-dx, x1 - left)) return null;
+    if (!clip(dx, right - x1)) return null;
+    if (!clip(-dy, y1 - bottom)) return null;
+    if (!clip(dy, top - y1)) return null;
+    return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
+  }
+
+  function drawClipped(x1, y1, x2, y2) {
+    const clipped = clipLine(x1, y1, x2, y2);
+    if (!clipped) return;
+    const [cx1, cy1, cx2, cy2] = clipped;
+    page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
+  }
+
+  // 1. Horizontal lines at verticalGap intervals from top down to bottom
+  for (let y = top; y >= bottom; y -= verticalGap) {
+    drawClipped(left, y, right, y);
+  }
+
+  // 2. +60° lines (slope = +S3 in PDF coords, up-right): anchor at y=bottom
+  // 3. -60° lines (slope = -S3 in PDF coords, down-right): anchor at y=top
+  // Both use same x0 range: [left - diagHeight/S3, right], step = spacing
+  for (let x0 = left - diagHeight / S3; x0 <= right; x0 += spacing) {
+    // +60°: through (x0, bottom) — extend far in both directions, clip handles bounds
+    drawClipped(x0 - farDist, bottom - farDist * S3, x0 + farDist, bottom + farDist * S3);
+    // -60°: through (x0, top) — extend far in both directions, clip handles bounds
+    drawClipped(x0 - farDist, top + farDist * S3, x0 + farDist, top - farDist * S3);
+  }
+}
+function drawCornell(page, config) {
+  const { paperW, paperH, cueWidth, summaryHeight, lineSpacing, lineWeight, dividerWeight,
+          marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+  const left = marginLeft;
+  const right = paperW - marginRight;
+  const top = paperH - marginTop;
+  const [r, g, b] = color;
+  const c = rgb(r, g, b);
+
+  const cueX = left + cueWidth;
+  const summaryY = marginBottom + summaryHeight;
+
+  // 1. Vertical cue divider (from summary line up to top margin)
+  page.drawLine({
+    start: { x: cueX, y: summaryY },
+    end: { x: cueX, y: top },
+    thickness: dividerWeight,
+    color: c,
+    opacity
+  });
+
+  // 2. Summary horizontal divider (full width)
+  page.drawLine({
+    start: { x: left, y: summaryY },
+    end: { x: right, y: summaryY },
+    thickness: dividerWeight,
+    color: c,
+    opacity
+  });
+
+  // 3. Horizontal ruled lines (full width, from top down to just above summary divider)
+  for (let y = top; y >= summaryY; y -= lineSpacing) {
+    page.drawLine({
+      start: { x: left, y },
+      end: { x: right, y },
+      thickness: lineWeight,
+      color: c,
+      opacity
+    });
+  }
+}
 
 /* Preview stubs — TODO: implement in later tasks */
-function previewDotGrid(ctx, config) { /* TODO: implement in T2 */ }
-function previewRuled(ctx, config) { /* TODO: implement in T3 */ }
-function previewSquareGrid(ctx, config) { /* TODO: implement in T4 */ }
-function previewIsometric(ctx, config) { /* TODO: implement in T5 */ }
-function previewCornell(ctx, config) { /* TODO: implement in T6 */ }
+function previewDotGrid(ctx, config) {
+  const { paperW, paperH, spacing, dotSize, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasWidth, canvasHeight, scale } = config;
+  const radius = (dotSize / 2) * scale;
+  const [r, g, b] = color;
+
+  ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+
+  for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
+    const cy = canvasHeight - pdfY * scale;
+    for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += spacing) {
+      const cx = pdfX * scale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+function previewRuled(ctx, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const left = marginLeft * scale;
+  const right = (paperW - marginRight) * scale;
+  const [r, g, b] = color;
+
+  ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  ctx.lineWidth = lineWeight * scale;
+
+  for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
+    const cy = canvasHeight - pdfY * scale;
+    ctx.beginPath();
+    ctx.moveTo(left, cy);
+    ctx.lineTo(right, cy);
+    ctx.stroke();
+  }
+}
+function previewSquareGrid(ctx, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const left = marginLeft * scale;
+  const right = (paperW - marginRight) * scale;
+  const bottom = marginBottom * scale;
+  const top = (paperH - marginTop) * scale;
+  const [r, g, b] = color;
+
+  ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  ctx.lineWidth = lineWeight * scale;
+
+  // Horizontal lines (canvas Y inverted)
+  for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= spacing) {
+    const cy = canvasHeight - pdfY * scale;
+    ctx.beginPath();
+    ctx.moveTo(left, cy);
+    ctx.lineTo(right, cy);
+    ctx.stroke();
+  }
+
+  // Vertical lines
+  const canvasBottom = canvasHeight - bottom;
+  const canvasTop = canvasHeight - top;
+  for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += spacing) {
+    const cx = pdfX * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, canvasTop);
+    ctx.lineTo(cx, canvasBottom);
+    ctx.stroke();
+  }
+}
+function previewIsometric(ctx, config) {
+  const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const [r, g, b] = color;
+
+  // Canvas drawable area bounds (PDF top → small canvas y; PDF bottom → large canvas y)
+  const cLeft = marginLeft * scale;
+  const cRight = (paperW - marginRight) * scale;
+  const cBottom = canvasHeight - marginBottom * scale;
+  const cTop = canvasHeight - (paperH - marginTop) * scale;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cLeft, cTop, cRight - cLeft, cBottom - cTop);
+  ctx.clip();
+
+  ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  ctx.lineWidth = lineWeight * scale;
+
+  const S3 = Math.sqrt(3);
+  const vGap = spacing * S3 / 2 * scale;          // vertical gap between horizontal lines, in canvas px
+  const spacingCanvas = spacing * scale;
+  const diagHeight = cBottom - cTop;               // drawable height in canvas px
+  const diagWidth = cRight - cLeft;
+  const farDist = (diagWidth + diagHeight) * 2;
+
+  function drawLine(x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // 1. Horizontal lines: from cTop downward by vGap (canvas y increases downward)
+  for (let cy = cTop; cy <= cBottom; cy += vGap) {
+    drawLine(cLeft, cy, cRight, cy);
+  }
+
+  // 2. PDF +60° → canvas slope -S3 (up-right on screen), anchor at (cx0, cBottom)
+  //    cy = cBottom - S3 * (cx - cx0)
+  // 3. PDF -60° → canvas slope +S3 (down-right on screen), anchor at (cx0, cTop)
+  //    cy = cTop + S3 * (cx - cx0)
+  for (let cx0 = cLeft - diagHeight / S3; cx0 <= cRight; cx0 += spacingCanvas) {
+    // +60° PDF (canvas up-right, slope -S3)
+    drawLine(cx0 - farDist, cBottom + farDist * S3, cx0 + farDist, cBottom - farDist * S3);
+    // -60° PDF (canvas down-right, slope +S3)
+    drawLine(cx0 - farDist, cTop - farDist * S3, cx0 + farDist, cTop + farDist * S3);
+  }
+
+  ctx.restore();
+}
+function previewCornell(ctx, config) {
+  const { paperW, paperH, cueWidth, summaryHeight, lineSpacing, lineWeight, dividerWeight,
+          marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+  const [r, g, b] = color;
+
+  const left = marginLeft * scale;
+  const right = (paperW - marginRight) * scale;
+  const canvasTop = canvasHeight - (paperH - marginTop) * scale;
+
+  const cueX = left + cueWidth * scale;
+  const summaryY_pdf = marginBottom + summaryHeight;
+  const summaryY = canvasHeight - summaryY_pdf * scale;
+
+  const rgba = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
+  ctx.strokeStyle = rgba;
+
+  // 1. Vertical cue divider
+  ctx.lineWidth = dividerWeight * scale;
+  ctx.beginPath();
+  ctx.moveTo(cueX, summaryY);
+  ctx.lineTo(cueX, canvasTop);
+  ctx.stroke();
+
+  // 2. Summary horizontal divider
+  ctx.lineWidth = dividerWeight * scale;
+  ctx.beginPath();
+  ctx.moveTo(left, summaryY);
+  ctx.lineTo(right, summaryY);
+  ctx.stroke();
+
+  // 3. Ruled lines (full width, from top down to summary divider)
+  ctx.lineWidth = lineWeight * scale;
+  for (let pdfY = (paperH - marginTop); pdfY >= (marginBottom + summaryHeight); pdfY -= lineSpacing) {
+    const cy = canvasHeight - pdfY * scale;
+    ctx.beginPath();
+    ctx.moveTo(left, cy);
+    ctx.lineTo(right, cy);
+    ctx.stroke();
+  }
+}
 
 /* Utility stubs — TODO: implement in T7 */
 async function generatePDF() { /* TODO: implement in T7 */ }
