@@ -530,6 +530,23 @@
     <div class="panel">
       <h3>Cornell Notes Settings</h3>
       <div class="config">
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>Fill Pattern</label>
+          <select id="cornell-fillPattern" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="ruled" selected>Ruled Lines</option>
+            <option value="dot-grid">Dot Grid</option>
+            <option value="square-grid">Square Grid</option>
+            <option value="blank">Blank</option>
+          </select>
+        </div>
+        <div class="field" id="cornell-dotSize-field" style="display:none">
+          <label>Dot Size (mm)</label>
+          <input type="number" id="cornell-dotSize" min="0.3" max="3" step="0.1" value="0.8">
+        </div>
+        <div class="field" id="cornell-gridWeight-field" style="display:none">
+          <label>Grid Line Weight (mm)</label>
+          <input type="number" id="cornell-gridWeight" min="0.1" max="2" step="0.1" value="0.25">
+        </div>
         <div class="field">
           <label>Cue Width (mm)</label>
           <input type="number" id="cornell-cueWidth" min="30" max="100" step="1" value="63.5">
@@ -631,8 +648,8 @@ const PRESETS = {
   'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4, majorInterval: 0, majorWeight: 0.5, majorOpacity: 0.7 },
   'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, mode: 'lines', dotSize: 0.8 },
   'cornell': {
-    letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 },
-    a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4 }
+    letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 },
+    a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 }
   }
 };
 const { PDFDocument, rgb } = PDFLib;
@@ -823,7 +840,8 @@ function drawIsometric(page, config) {
 }
 function drawCornell(page, config) {
   const { paperW, paperH, cueWidth, summaryHeight, lineSpacing, lineWeight, dividerWeight,
-          marginTop, marginRight, marginBottom, marginLeft, color, opacity } = config;
+          marginTop, marginRight, marginBottom, marginLeft, color, opacity,
+          fillPattern = 'ruled', dotSize, gridWeight } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const top = paperH - marginTop;
@@ -833,7 +851,7 @@ function drawCornell(page, config) {
   const cueX = left + cueWidth;
   const summaryY = marginBottom + summaryHeight;
 
-  // 1. Vertical cue divider (from summary line up to top margin)
+  // 1. Vertical cue divider (always drawn)
   page.drawLine({
     start: { x: cueX, y: summaryY },
     end: { x: cueX, y: top },
@@ -842,7 +860,7 @@ function drawCornell(page, config) {
     opacity
   });
 
-  // 2. Summary horizontal divider (full width)
+  // 2. Summary horizontal divider (always drawn)
   page.drawLine({
     start: { x: left, y: summaryY },
     end: { x: right, y: summaryY },
@@ -851,16 +869,46 @@ function drawCornell(page, config) {
     opacity
   });
 
-  // 3. Horizontal ruled lines (full width, from top down to bottom margin)
-  for (let y = top; y >= marginBottom; y -= lineSpacing) {
-    page.drawLine({
-      start: { x: left, y },
-      end: { x: right, y },
-      thickness: lineWeight,
-      color: c,
-      opacity
-    });
+  // 3. Fill dispatch (full width, from top down to marginBottom)
+  if (fillPattern === 'ruled') {
+    for (let y = top; y >= marginBottom; y -= lineSpacing) {
+      page.drawLine({
+        start: { x: left, y },
+        end: { x: right, y },
+        thickness: lineWeight,
+        color: c,
+        opacity
+      });
+    }
+  } else if (fillPattern === 'dot-grid') {
+    for (let y = top; y >= marginBottom; y -= lineSpacing) {
+      for (let x = left; x <= right; x += lineSpacing) {
+        page.drawCircle({ x, y, size: dotSize, color: c, opacity });
+      }
+    }
+  } else if (fillPattern === 'square-grid') {
+    // Horizontal lines
+    for (let y = top; y >= marginBottom; y -= lineSpacing) {
+      page.drawLine({
+        start: { x: left, y },
+        end: { x: right, y },
+        thickness: gridWeight,
+        color: c,
+        opacity
+      });
+    }
+    // Vertical lines
+    for (let x = left; x <= right; x += lineSpacing) {
+      page.drawLine({
+        start: { x, y: marginBottom },
+        end: { x, y: top },
+        thickness: gridWeight,
+        color: c,
+        opacity
+      });
+    }
   }
+  // 'blank': only dividers, no fill
 }
 
 /* Preview functions */
@@ -1071,12 +1119,14 @@ function previewIsometric(ctx, config) {
 }
 function previewCornell(ctx, config) {
   const { paperW, paperH, cueWidth, summaryHeight, lineSpacing, lineWeight, dividerWeight,
-          marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale } = config;
+          marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
+          fillPattern = 'ruled', dotSize, gridWeight } = config;
   const [r, g, b] = color;
 
   const left = marginLeft * scale;
   const right = (paperW - marginRight) * scale;
   const canvasTop = canvasHeight - (paperH - marginTop) * scale;
+  const canvasBottom = canvasHeight - marginBottom * scale;
 
   const cueX = left + cueWidth * scale;
   const summaryY_pdf = marginBottom + summaryHeight;
@@ -1085,29 +1135,62 @@ function previewCornell(ctx, config) {
   const rgba = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
   ctx.strokeStyle = rgba;
 
-  // 1. Vertical cue divider
+  // 1. Vertical cue divider (always drawn)
   ctx.lineWidth = dividerWeight * scale;
   ctx.beginPath();
   ctx.moveTo(cueX, summaryY);
   ctx.lineTo(cueX, canvasTop);
   ctx.stroke();
 
-  // 2. Summary horizontal divider
+  // 2. Summary horizontal divider (always drawn)
   ctx.lineWidth = dividerWeight * scale;
   ctx.beginPath();
   ctx.moveTo(left, summaryY);
   ctx.lineTo(right, summaryY);
   ctx.stroke();
 
-  // 3. Ruled lines (full width, from top down to bottom margin)
-  ctx.lineWidth = lineWeight * scale;
-  for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= lineSpacing) {
-    const cy = canvasHeight - pdfY * scale;
-    ctx.beginPath();
-    ctx.moveTo(left, cy);
-    ctx.lineTo(right, cy);
-    ctx.stroke();
+  // 3. Fill dispatch
+  if (fillPattern === 'ruled') {
+    ctx.lineWidth = lineWeight * scale;
+    for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= lineSpacing) {
+      const cy = canvasHeight - pdfY * scale;
+      ctx.beginPath();
+      ctx.moveTo(left, cy);
+      ctx.lineTo(right, cy);
+      ctx.stroke();
+    }
+  } else if (fillPattern === 'dot-grid') {
+    const dotRadius = (dotSize / 2) * scale;
+    ctx.fillStyle = rgba;
+    for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= lineSpacing) {
+      const cy = canvasHeight - pdfY * scale;
+      for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += lineSpacing) {
+        const cx = pdfX * scale;
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (fillPattern === 'square-grid') {
+    ctx.lineWidth = (gridWeight) * scale;
+    // Horizontal lines
+    for (let pdfY = (paperH - marginTop); pdfY >= marginBottom; pdfY -= lineSpacing) {
+      const cy = canvasHeight - pdfY * scale;
+      ctx.beginPath();
+      ctx.moveTo(left, cy);
+      ctx.lineTo(right, cy);
+      ctx.stroke();
+    }
+    // Vertical lines
+    for (let pdfX = marginLeft; pdfX <= (paperW - marginRight); pdfX += lineSpacing) {
+      const cx = pdfX * scale;
+      ctx.beginPath();
+      ctx.moveTo(cx, canvasTop);
+      ctx.lineTo(cx, canvasBottom);
+      ctx.stroke();
+    }
   }
+  // 'blank': only dividers, no fill
 }
 
 /* ── getConfig ── reads form state, returns config with mm→pt conversion ── */
@@ -1184,6 +1267,9 @@ function getConfig() {
       lineSpacing:    parseFloat(document.getElementById('cornell-lineSpacing').value)    * MM,
       lineWeight:     parseFloat(document.getElementById('cornell-lineWeight').value)     * MM,
       dividerWeight:  parseFloat(document.getElementById('cornell-dividerWeight').value)  * MM,
+      fillPattern: document.getElementById('cornell-fillPattern').value,
+      dotSize:     parseFloat(document.getElementById('cornell-dotSize').value) * MM,
+      gridWeight:  parseFloat(document.getElementById('cornell-gridWeight').value) * MM,
       marginTop:      parseFloat(document.getElementById('cornell-marginTop').value)      * MM,
       marginRight:    parseFloat(document.getElementById('cornell-marginRight').value)    * MM,
       marginBottom:   parseFloat(document.getElementById('cornell-marginBottom').value)   * MM,
@@ -1285,6 +1371,13 @@ function loadPreset(type) {
     document.getElementById('cornell-marginRight').value  = margins[1];
     document.getElementById('cornell-marginBottom').value = margins[2];
     document.getElementById('cornell-marginLeft').value   = margins[3];
+    document.getElementById('cornell-fillPattern').value = preset.fillPattern ?? 'ruled';
+    document.getElementById('cornell-dotSize').value = preset.dotSize ?? 0.8;
+    document.getElementById('cornell-gridWeight').value = preset.gridWeight ?? 0.25;
+    // Show/hide conditional inputs
+    const fp = preset.fillPattern ?? 'ruled';
+    document.getElementById('cornell-dotSize-field').style.display = fp === 'dot-grid' ? '' : 'none';
+    document.getElementById('cornell-gridWeight-field').style.display = fp === 'square-grid' ? '' : 'none';
   }
 }
 
@@ -1484,6 +1577,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('isometric-mode').addEventListener('change', () => {
     const mode = document.getElementById('isometric-mode').value;
     document.getElementById('isometric-dotSize-field').style.display = mode === 'dots' ? '' : 'none';
+    updatePreview();
+  });
+
+  // Cornell fill pattern show/hide
+  document.getElementById('cornell-fillPattern').addEventListener('change', () => {
+    const fp = document.getElementById('cornell-fillPattern').value;
+    document.getElementById('cornell-dotSize-field').style.display = fp === 'dot-grid' ? '' : 'none';
+    document.getElementById('cornell-gridWeight-field').style.display = fp === 'square-grid' ? '' : 'none';
     updatePreview();
   });
 
