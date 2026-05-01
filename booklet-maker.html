@@ -563,7 +563,7 @@ removeFile.addEventListener('click', resetFile);
 async function loadFile(file) {
   srcPdfBytes = await file.arrayBuffer();
   try {
-    srcPdfDoc = await PDFDocument.load(srcPdfBytes);
+    srcPdfDoc = await PDFDocument.load(srcPdfBytes, { ignoreEncryption: true });
   } catch (err) {
     alert('Failed to load PDF: ' + err.message);
     return;
@@ -817,11 +817,11 @@ async function generate() {
 
     // Embed ALL source pages once upfront to avoid duplicating resources
     statusText.textContent = 'Embedding pages...';
-    const srcPages = [];
+    const indices = [];
     for (let i = cfg.pageFrom - 1; i < cfg.pageTo; i++) {
-      srcPages.push(srcPdfDoc.getPage(i));
+      indices.push(i);
     }
-    const embeddedPages = await outPdf.embedPages(srcPages);
+    const embeddedPages = await outPdf.embedPdf(srcPdfBytes, indices);
 
     let pagesProcessed = 0;
 
