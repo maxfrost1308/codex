@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Booklet Maker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root {
     --bg: #1a1a2e;
@@ -460,6 +461,17 @@
       </div>
     </div>
 
+    <!-- Advanced -->
+    <div class="config-group full-width">
+      <h3>Advanced</h3>
+      <div class="field">
+        <span class="checkbox-field">
+          <input type="checkbox" id="rasterMode">
+          <label for="rasterMode">Render pages as images (try this if output is blank)</label>
+        </span>
+      </div>
+    </div>
+
     <!-- Page range -->
     <div class="config-group full-width">
       <h3>Page range</h3>
@@ -814,14 +826,47 @@ async function generate() {
     sigs.forEach(sig => { totalOutputPages += (sig.count / 4) * 2; });
 
     const outPdf = await PDFDocument.create();
+    const rasterMode = document.getElementById('rasterMode').checked;
 
-    // Embed ALL source pages once upfront to avoid duplicating resources
-    statusText.textContent = 'Embedding pages...';
-    const indices = [];
-    for (let i = cfg.pageFrom - 1; i < cfg.pageTo; i++) {
-      indices.push(i);
+    let embeddedItems; // Array of { type: 'page'|'image', ref, w, h }
+
+    if (rasterMode) {
+      statusText.textContent = 'Loading renderer...';
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdfJsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(srcPdfBytes) }).promise;
+      const RENDER_SCALE = 3;
+      embeddedItems = [];
+
+      for (let i = 0; i < cfg.totalPages; i++) {
+        const pageNum = i + cfg.pageFrom;
+        const pdfPage = await pdfJsDoc.getPage(pageNum);
+        const baseVp = pdfPage.getViewport({ scale: 1 });
+        const viewport = pdfPage.getViewport({ scale: RENDER_SCALE });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const image = await outPdf.embedPng(await blob.arrayBuffer());
+        embeddedItems.push({ type: 'image', ref: image, w: baseVp.width, h: baseVp.height });
+
+        const pct = ((i + 1) / cfg.totalPages * 30).toFixed(0);
+        progressFill.style.width = `${pct}%`;
+        statusText.textContent = `Rendering page ${i + 1} of ${cfg.totalPages}...`;
+        await new Promise(r => setTimeout(r, 0));
+      }
+      pdfJsDoc.destroy();
+    } else {
+      statusText.textContent = 'Embedding pages...';
+      const indices = [];
+      for (let i = cfg.pageFrom - 1; i < cfg.pageTo; i++) indices.push(i);
+      const embeddedPages = await outPdf.embedPdf(srcPdfBytes, indices);
+      embeddedItems = embeddedPages.map(ep => ({ type: 'page', ref: ep, w: ep.width, h: ep.height }));
     }
-    const embeddedPages = await outPdf.embedPdf(srcPdfBytes, indices);
 
     let pagesProcessed = 0;
 
@@ -832,26 +877,21 @@ async function generate() {
       for (let shIdx = 0; shIdx < sheets.length; shIdx++) {
         const sh = sheets[shIdx];
 
-        // Creep compensation: shift inner sheets outward
         let creepShift = 0;
         if (cfg.creep && numSheets > 1) {
-          // Max creep ~ 1pt per sheet, linear from outer to inner
           const maxCreep = numSheets * 0.5;
           creepShift = maxCreep * (shIdx / (numSheets - 1));
         }
 
-        // Process front side
-        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedPages);
+        imposeSide(outPdf, cfg, sig, [sh.frontLeft, sh.frontRight], true, creepShift, embeddedItems);
         pagesProcessed++;
-        progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
+        progressFill.style.width = `${(30 + pagesProcessed / totalOutputPages * 70).toFixed(0)}%`;
         statusText.textContent = `Processing sheet ${Math.ceil(pagesProcessed / 2)} of ${totalOutputPages / 2}...`;
 
-        // Process back side
-        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedPages);
+        imposeSide(outPdf, cfg, sig, [sh.backLeft, sh.backRight], false, creepShift, embeddedItems);
         pagesProcessed++;
-        progressFill.style.width = `${(pagesProcessed / totalOutputPages * 100).toFixed(0)}%`;
+        progressFill.style.width = `${(30 + pagesProcessed / totalOutputPages * 70).toFixed(0)}%`;
 
-        // Yield to UI
         await new Promise(r => setTimeout(r, 0));
       }
     }
@@ -881,29 +921,24 @@ async function generate() {
   generateBtn.disabled = false;
 }
 
-function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedPages) {
+function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, embeddedItems) {
   const { paperW, paperH, fitMode, hAlign, vAlign, rotation } = cfg;
   const halfW = paperW / 2;
 
-  // Create the output page in landscape
   const page = outPdf.addPage([paperW, paperH]);
 
   for (let pos = 0; pos < 2; pos++) {
     const idx = pos === 0 ? leftIdx : rightIdx;
 
-    // Check if this page is blank (padding or cover blank)
     if (idx >= sig.count) continue;
     const srcIdx = sig.paddedMap[idx];
     if (srcIdx === null) continue;
+    if (srcIdx >= embeddedItems.length) continue;
 
-    if (srcIdx >= embeddedPages.length) continue;
+    const item = embeddedItems[srcIdx];
+    const srcW = item.w;
+    const srcH = item.h;
 
-    // Look up the pre-embedded page
-    const embedded = embeddedPages[srcIdx];
-    const srcW = embedded.width;
-    const srcH = embedded.height;
-
-    // Calculate scale
     let scale;
     if (fitMode === 'none') {
       scale = 1;
@@ -916,41 +951,32 @@ function imposeSide(outPdf, cfg, sig, [leftIdx, rightIdx], isFront, creepShift, 
     const scaledW = srcW * scale;
     const scaledH = srcH * scale;
 
-    // Vertical alignment
     let ty;
     if (vAlign === 'top') ty = paperH - scaledH;
     else if (vAlign === 'bottom') ty = 0;
     else ty = (paperH - scaledH) / 2;
 
-    // Horizontal alignment
     let tx;
     if (pos === 0) {
-      // Left page
-      if (hAlign === 'inner') tx = halfW - scaledW;       // right-align to fold
-      else if (hAlign === 'outer') tx = 0;                 // left-align to paper edge
-      else tx = (halfW - scaledW) / 2;                     // center
-
-      // Creep: shift left page leftward
+      if (hAlign === 'inner') tx = halfW - scaledW;
+      else if (hAlign === 'outer') tx = 0;
+      else tx = (halfW - scaledW) / 2;
       tx -= creepShift;
     } else {
-      // Right page
-      if (hAlign === 'inner') tx = halfW;                  // left-align to fold
-      else if (hAlign === 'outer') tx = paperW - scaledW;  // right-align to paper edge
-      else tx = halfW + (halfW - scaledW) / 2;             // center
-
-      // Creep: shift right page rightward
+      if (hAlign === 'inner') tx = halfW;
+      else if (hAlign === 'outer') tx = paperW - scaledW;
+      else tx = halfW + (halfW - scaledW) / 2;
       tx += creepShift;
     }
 
-    page.drawPage(embedded, {
-      x: tx,
-      y: ty,
-      width: scaledW,
-      height: scaledH,
-    });
+    const drawOpts = { x: tx, y: ty, width: scaledW, height: scaledH };
+    if (item.type === 'image') {
+      page.drawImage(item.ref, drawOpts);
+    } else {
+      page.drawPage(item.ref, drawOpts);
+    }
   }
 
-  // Apply rotation
   if (rotation === 'front-cw') {
     page.setRotation(isFront ? degrees(90) : degrees(-90));
   } else if (rotation === 'front-ccw') {
