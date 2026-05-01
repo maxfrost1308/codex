@@ -302,6 +302,51 @@
     align-items: center;
     margin-top: 4px;
   }
+
+  /* Global controls row */
+  .global-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .global-controls .paper-toggle {
+    margin-bottom: 0;
+  }
+  .unit-label-tag {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-right: 2px;
+  }
+
+  /* Hex diagram */
+  .hex-diagram-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hex-diagram-wrap canvas {
+    display: block;
+  }
+  .hex-dims {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+  .hex-dims strong {
+    color: var(--text);
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -592,9 +637,13 @@
   <div class="tab-content" id="panel-hex-grid">
     <div class="panel">
       <h3>Hex Grid Settings</h3>
+      <div class="hex-diagram-wrap">
+        <canvas id="hexDiagramCanvas" width="220" height="150"></canvas>
+        <div class="hex-dims" id="hexDims"></div>
+      </div>
       <div class="config">
         <div class="field">
-          <label>Spacing (mm)</label>
+          <label>Side Length (mm)</label>
           <input type="number" id="hex-grid-spacing" min="3" max="20" step="0.5" value="7">
         </div>
         <div class="field">
@@ -639,10 +688,16 @@
     </div>
   </div>
 
-  <!-- Paper size toggle -->
-  <div class="paper-toggle">
-    <button class="paper-btn active" data-size="letter">Letter</button>
-    <button class="paper-btn" data-size="a4">A4</button>
+  <!-- Paper size & unit toggles -->
+  <div class="global-controls">
+    <div class="paper-toggle">
+      <button class="paper-btn active" data-size="letter">Letter</button>
+      <button class="paper-btn" data-size="a4">A4</button>
+    </div>
+    <div class="paper-toggle">
+      <button class="paper-btn active" data-unit="mm">mm</button>
+      <button class="paper-btn" data-unit="in">in</button>
+    </div>
   </div>
 
   <!-- Color swatches -->
@@ -706,6 +761,48 @@ const PRESETS = {
   }
 };
 const { PDFDocument, rgb } = PDFLib;
+let currentUnit = 'mm';
+
+function unitFactor() {
+  return currentUnit === 'mm' ? MM : 72;
+}
+
+function toggleUnit(newUnit) {
+  if (newUnit === currentUnit) return;
+  const toInches = newUnit === 'in';
+  const factor = toInches ? 1 / 25.4 : 25.4;
+  const decimals = toInches ? 3 : 2;
+
+  document.querySelectorAll('.field').forEach(field => {
+    const label = field.querySelector('label');
+    const input = field.querySelector('input[type="number"]');
+    if (!label || !input) return;
+    const txt = label.textContent;
+    if (!txt.includes('(mm)') && !txt.includes('(in)')) return;
+
+    const raw = parseFloat(input.value);
+    if (!isNaN(raw)) input.value = +(raw * factor).toFixed(decimals);
+
+    ['min', 'max', 'step'].forEach(attr => {
+      const v = parseFloat(input.getAttribute(attr));
+      if (!isNaN(v)) input.setAttribute(attr, +(v * factor).toFixed(4));
+    });
+
+    label.textContent = txt.replace(
+      toInches ? '(mm)' : '(in)',
+      toInches ? '(in)' : '(mm)'
+    );
+  });
+
+  currentUnit = newUnit;
+
+  document.querySelectorAll('[data-unit]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.unit === newUnit);
+  });
+
+  updatePreview();
+}
+
 
 /* Draw functions */
 function drawDotGrid(page, config) {
@@ -1443,85 +1540,86 @@ function getConfig() {
   const opacity = parseFloat(document.getElementById('opacitySlider').value);
   const pageCount = parseInt(document.getElementById('pageCount').value, 10);
 
+  const UF = unitFactor();
   let params = {};
   if (type === 'dot-grid') {
     params = {
-      spacing:      parseFloat(document.getElementById('dot-grid-spacing').value)      * MM,
-      dotSize:      parseFloat(document.getElementById('dot-grid-dotSize').value)      * MM,
+      spacing:      parseFloat(document.getElementById('dot-grid-spacing').value)      * UF,
+      dotSize:      parseFloat(document.getElementById('dot-grid-dotSize').value)      * UF,
       shape:        document.getElementById('dot-grid-shape').value,
-      marginTop:    parseFloat(document.getElementById('dot-grid-marginTop').value)    * MM,
-      marginRight:  parseFloat(document.getElementById('dot-grid-marginRight').value)  * MM,
-      marginBottom: parseFloat(document.getElementById('dot-grid-marginBottom').value) * MM,
-      marginLeft:   parseFloat(document.getElementById('dot-grid-marginLeft').value)   * MM,
+      marginTop:    parseFloat(document.getElementById('dot-grid-marginTop').value)    * UF,
+      marginRight:  parseFloat(document.getElementById('dot-grid-marginRight').value)  * UF,
+      marginBottom: parseFloat(document.getElementById('dot-grid-marginBottom').value) * UF,
+      marginLeft:   parseFloat(document.getElementById('dot-grid-marginLeft').value)   * UF,
     };
   } else if (type === 'ruled') {
     params = {
-      spacing:      parseFloat(document.getElementById('ruled-spacing').value)      * MM,
-      lineWeight:   parseFloat(document.getElementById('ruled-lineWeight').value)   * MM,
-      marginTop:    parseFloat(document.getElementById('ruled-marginTop').value)    * MM,
-      marginRight:  parseFloat(document.getElementById('ruled-marginRight').value)  * MM,
-      marginBottom: parseFloat(document.getElementById('ruled-marginBottom').value) * MM,
-      marginLeft:   parseFloat(document.getElementById('ruled-marginLeft').value)   * MM,
+      spacing:      parseFloat(document.getElementById('ruled-spacing').value)      * UF,
+      lineWeight:   parseFloat(document.getElementById('ruled-lineWeight').value)   * UF,
+      marginTop:    parseFloat(document.getElementById('ruled-marginTop').value)    * UF,
+      marginRight:  parseFloat(document.getElementById('ruled-marginRight').value)  * UF,
+      marginBottom: parseFloat(document.getElementById('ruled-marginBottom').value) * UF,
+      marginLeft:   parseFloat(document.getElementById('ruled-marginLeft').value)   * UF,
       marginLine:         document.getElementById('ruled-marginLine').checked,
       marginLineColor:    (() => {
         const active = document.querySelector('.margin-swatch.active');
         return active ? active.dataset.marginRgb.split(',').map(Number) : [0.89, 0.27, 0.27];
       })(),
-      marginLineWeight:   parseFloat(document.getElementById('ruled-marginLineWeight').value) * MM,
-       marginLinePosition: parseFloat(document.getElementById('ruled-marginLinePosition').value) * MM,
+      marginLineWeight:   parseFloat(document.getElementById('ruled-marginLineWeight').value) * UF,
+       marginLinePosition: parseFloat(document.getElementById('ruled-marginLinePosition').value) * UF,
        headerLine:       document.getElementById('ruled-headerLine').checked,
-       headerLineWeight: parseFloat(document.getElementById('ruled-headerLineWeight').value) * MM,
+       headerLineWeight: parseFloat(document.getElementById('ruled-headerLineWeight').value) * UF,
        midlines:         document.getElementById('ruled-midlines').checked,
      };
   } else if (type === 'square-grid') {
     params = {
-      spacing:      parseFloat(document.getElementById('square-grid-spacing').value)      * MM,
-      lineWeight:   parseFloat(document.getElementById('square-grid-lineWeight').value)   * MM,
-      marginTop:    parseFloat(document.getElementById('square-grid-marginTop').value)    * MM,
-      marginRight:  parseFloat(document.getElementById('square-grid-marginRight').value)  * MM,
-      marginBottom: parseFloat(document.getElementById('square-grid-marginBottom').value) * MM,
-      marginLeft:   parseFloat(document.getElementById('square-grid-marginLeft').value)   * MM,
+      spacing:      parseFloat(document.getElementById('square-grid-spacing').value)      * UF,
+      lineWeight:   parseFloat(document.getElementById('square-grid-lineWeight').value)   * UF,
+      marginTop:    parseFloat(document.getElementById('square-grid-marginTop').value)    * UF,
+      marginRight:  parseFloat(document.getElementById('square-grid-marginRight').value)  * UF,
+      marginBottom: parseFloat(document.getElementById('square-grid-marginBottom').value) * UF,
+      marginLeft:   parseFloat(document.getElementById('square-grid-marginLeft').value)   * UF,
       majorInterval: parseInt(document.getElementById('square-grid-majorInterval').value) || 0,
-      majorWeight:   parseFloat(document.getElementById('square-grid-majorWeight').value)   * MM,
+      majorWeight:   parseFloat(document.getElementById('square-grid-majorWeight').value)   * UF,
       majorOpacity:  parseFloat(document.getElementById('square-grid-majorOpacity').value),
     };
   } else if (type === 'isometric') {
     params = {
-      spacing:      parseFloat(document.getElementById('isometric-spacing').value)      * MM,
-      lineWeight:   parseFloat(document.getElementById('isometric-lineWeight').value)   * MM,
-      marginTop:    parseFloat(document.getElementById('isometric-marginTop').value)    * MM,
-      marginRight:  parseFloat(document.getElementById('isometric-marginRight').value)  * MM,
-      marginBottom: parseFloat(document.getElementById('isometric-marginBottom').value) * MM,
-      marginLeft:   parseFloat(document.getElementById('isometric-marginLeft').value)   * MM,
+      spacing:      parseFloat(document.getElementById('isometric-spacing').value)      * UF,
+      lineWeight:   parseFloat(document.getElementById('isometric-lineWeight').value)   * UF,
+      marginTop:    parseFloat(document.getElementById('isometric-marginTop').value)    * UF,
+      marginRight:  parseFloat(document.getElementById('isometric-marginRight').value)  * UF,
+      marginBottom: parseFloat(document.getElementById('isometric-marginBottom').value) * UF,
+      marginLeft:   parseFloat(document.getElementById('isometric-marginLeft').value)   * UF,
       mode:    document.getElementById('isometric-mode').value,
-      dotSize: parseFloat(document.getElementById('isometric-dotSize').value) * MM,
+      dotSize: parseFloat(document.getElementById('isometric-dotSize').value) * UF,
     };
   } else if (type === 'hex-grid') {
     params = {
-      spacing:      parseFloat(document.getElementById('hex-grid-spacing').value)      * MM,
-      lineWeight:   parseFloat(document.getElementById('hex-grid-lineWeight').value)   * MM,
-      marginTop:    parseFloat(document.getElementById('hex-grid-marginTop').value)    * MM,
-      marginRight:  parseFloat(document.getElementById('hex-grid-marginRight').value)  * MM,
-      marginBottom: parseFloat(document.getElementById('hex-grid-marginBottom').value) * MM,
-      marginLeft:   parseFloat(document.getElementById('hex-grid-marginLeft').value)   * MM,
+      spacing:      parseFloat(document.getElementById('hex-grid-spacing').value)      * UF,
+      lineWeight:   parseFloat(document.getElementById('hex-grid-lineWeight').value)   * UF,
+      marginTop:    parseFloat(document.getElementById('hex-grid-marginTop').value)    * UF,
+      marginRight:  parseFloat(document.getElementById('hex-grid-marginRight').value)  * UF,
+      marginBottom: parseFloat(document.getElementById('hex-grid-marginBottom').value) * UF,
+      marginLeft:   parseFloat(document.getElementById('hex-grid-marginLeft').value)   * UF,
       orientation:  document.getElementById('hex-grid-orientation').value,
       mode:         document.getElementById('hex-grid-mode').value,
-      dotSize:      parseFloat(document.getElementById('hex-grid-dotSize').value)      * MM,
+      dotSize:      parseFloat(document.getElementById('hex-grid-dotSize').value)      * UF,
     };
   } else if (type === 'cornell') {
     params = {
-      cueWidth:       parseFloat(document.getElementById('cornell-cueWidth').value)       * MM,
-      summaryHeight:  parseFloat(document.getElementById('cornell-summaryHeight').value)  * MM,
-      lineSpacing:    parseFloat(document.getElementById('cornell-lineSpacing').value)    * MM,
-      lineWeight:     parseFloat(document.getElementById('cornell-lineWeight').value)     * MM,
-      dividerWeight:  parseFloat(document.getElementById('cornell-dividerWeight').value)  * MM,
+      cueWidth:       parseFloat(document.getElementById('cornell-cueWidth').value)       * UF,
+      summaryHeight:  parseFloat(document.getElementById('cornell-summaryHeight').value)  * UF,
+      lineSpacing:    parseFloat(document.getElementById('cornell-lineSpacing').value)    * UF,
+      lineWeight:     parseFloat(document.getElementById('cornell-lineWeight').value)     * UF,
+      dividerWeight:  parseFloat(document.getElementById('cornell-dividerWeight').value)  * UF,
       fillPattern: document.getElementById('cornell-fillPattern').value,
-      dotSize:     parseFloat(document.getElementById('cornell-dotSize').value) * MM,
-      gridWeight:  parseFloat(document.getElementById('cornell-gridWeight').value) * MM,
-      marginTop:      parseFloat(document.getElementById('cornell-marginTop').value)      * MM,
-      marginRight:    parseFloat(document.getElementById('cornell-marginRight').value)    * MM,
-      marginBottom:   parseFloat(document.getElementById('cornell-marginBottom').value)   * MM,
-      marginLeft:     parseFloat(document.getElementById('cornell-marginLeft').value)     * MM,
+      dotSize:     parseFloat(document.getElementById('cornell-dotSize').value) * UF,
+      gridWeight:  parseFloat(document.getElementById('cornell-gridWeight').value) * UF,
+      marginTop:      parseFloat(document.getElementById('cornell-marginTop').value)      * UF,
+      marginRight:    parseFloat(document.getElementById('cornell-marginRight').value)    * UF,
+      marginBottom:   parseFloat(document.getElementById('cornell-marginBottom').value)   * UF,
+      marginLeft:     parseFloat(document.getElementById('cornell-marginLeft').value)     * UF,
     };
   }
 
@@ -1638,6 +1736,20 @@ function loadPreset(type) {
     document.getElementById('cornell-dotSize-field').style.display = fp === 'dot-grid' ? '' : 'none';
     document.getElementById('cornell-gridWeight-field').style.display = fp === 'square-grid' ? '' : 'none';
   }
+
+  if (currentUnit === 'in') {
+    const panel = document.getElementById('panel-' + type);
+    if (panel) {
+      panel.querySelectorAll('.field').forEach(field => {
+        const label = field.querySelector('label');
+        const input = field.querySelector('input[type="number"]');
+        if (!label || !input) return;
+        if (!label.textContent.includes('(in)')) return;
+        const v = parseFloat(input.value);
+        if (!isNaN(v)) input.value = +(v / 25.4).toFixed(3);
+      });
+    }
+  }
 }
 
 /* ── updatePreview ── renders canvas with correct aspect ratio ── */
@@ -1661,8 +1773,113 @@ function updatePreview() {
   else if (config.type === 'ruled')       previewRuled(ctx, previewConfig);
   else if (config.type === 'square-grid') previewSquareGrid(ctx, previewConfig);
   else if (config.type === 'isometric')   previewIsometric(ctx, previewConfig);
-  else if (config.type === 'hex-grid')    previewHexGrid(ctx, previewConfig);
+  else if (config.type === 'hex-grid') {  previewHexGrid(ctx, previewConfig); updateHexDiagram(); }
   else if (config.type === 'cornell')     previewCornell(ctx, previewConfig);
+}
+
+function updateHexDiagram() {
+  const canvas = document.getElementById('hexDiagramCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const orientation = document.getElementById('hex-grid-orientation').value;
+  const spacing = parseFloat(document.getElementById('hex-grid-spacing').value) || 7;
+  const unit = currentUnit === 'in' ? 'in' : 'mm';
+  const flatTop = orientation === 'flat-top';
+  const S3 = Math.sqrt(3);
+
+  const cx = W / 2;
+  const cy = H / 2 - 4;
+  const R = 48;
+  const angleOff = flatTop ? 0 : Math.PI / 6;
+
+  const verts = [];
+  for (let k = 0; k < 6; k++) {
+    const a = angleOff + k * Math.PI / 3;
+    verts.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  verts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+  ctx.closePath();
+  ctx.stroke();
+
+  const sideA = flatTop ? 4 : 3;
+  const sideB = (sideA + 1) % 6;
+  const [ax, ay] = verts[sideA];
+  const [bx, by] = verts[sideB];
+
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const nx = -dy / len, ny = dx / len;
+  const off = 14;
+  const dax = ax + nx * off, day = ay + ny * off;
+  const dbx = bx + nx * off, dby = by + ny * off;
+
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(ax + nx * 4, ay + ny * 4);
+  ctx.lineTo(dax + nx * 2, day + ny * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bx + nx * 4, by + ny * 4);
+  ctx.lineTo(dbx + nx * 2, dby + ny * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(dax, day);
+  ctx.lineTo(dbx, dby);
+  ctx.stroke();
+
+  const arrowSize = 5;
+  function drawArrow(px, py, dirx, diry) {
+    const ndx = dirx / len, ndy = diry / len;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px - ndx * arrowSize + ndy * arrowSize * 0.4, py - ndy * arrowSize - ndx * arrowSize * 0.4);
+    ctx.moveTo(px, py);
+    ctx.lineTo(px - ndx * arrowSize - ndy * arrowSize * 0.4, py - ndy * arrowSize + ndx * arrowSize * 0.4);
+    ctx.stroke();
+  }
+  drawArrow(dax, day, -dx, -dy);
+  drawArrow(dbx, dby, dx, dy);
+
+  const midX = (dax + dbx) / 2 + nx * 12;
+  const midY = (day + dby) / 2 + ny * 12;
+  ctx.fillStyle = '#e94560';
+  ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(spacing + ' ' + unit, midX, midY);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  const hexW = flatTop ? 2 * spacing : S3 * spacing;
+  const hexH = flatTop ? S3 * spacing : 2 * spacing;
+  const decimals = currentUnit === 'in' ? 3 : 1;
+  const dimsEl = document.getElementById('hexDims');
+  if (dimsEl) {
+    dimsEl.innerHTML =
+      'Width: <strong>' + hexW.toFixed(decimals) + ' ' + unit + '</strong>' +
+      ' · Height: <strong>' + hexH.toFixed(decimals) + ' ' + unit + '</strong>';
+  }
 }
 
 /* ── generatePDF ── full async pipeline ── */
@@ -1701,7 +1918,7 @@ async function generatePDF() {
     // Validate spacing
     const checkSpacing = config.type === 'cornell' ? config.lineSpacing : config.spacing;
     if (checkSpacing / MM < 3) {
-      alert('Spacing must be at least 3mm.');
+      alert(currentUnit === 'in' ? 'Spacing must be at least 0.118 in.' : 'Spacing must be at least 3 mm.');
       return;
     }
 
@@ -1768,14 +1985,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Paper size toggle
-  document.querySelectorAll('.paper-btn').forEach(btn => {
+  document.querySelectorAll('[data-size]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.paper-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('[data-size]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const activeType = document.querySelector('.tab.active').dataset.type;
       if (activeType === 'cornell') loadPreset('cornell');
       updatePreview();
     });
+  });
+
+  // Unit toggle
+  document.querySelectorAll('[data-unit]').forEach(btn => {
+    btn.addEventListener('click', () => toggleUnit(btn.dataset.unit));
   });
 
   // Color swatch selection
@@ -1849,6 +2071,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('hex-grid-orientation').addEventListener('change', () => {
+    updateHexDiagram();
     updatePreview();
   });
 
@@ -1871,9 +2094,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Generate button
   document.getElementById('generateBtn').addEventListener('click', generatePDF);
 
-  // Initialize: Dot Grid tab active, load preset, render preview
   loadPreset('dot-grid');
   updatePreview();
+  updateHexDiagram();
 });
 </script>
 </body>
