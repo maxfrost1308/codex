@@ -693,6 +693,10 @@
           <input type="number" id="hex-grid-dotSize" min="0.3" max="3" step="0.1" value="0.8">
         </div>
       </div>
+      <div class="checkbox-field" style="margin-top: 12px;">
+        <input type="checkbox" id="hex-grid-hideIncomplete">
+        <label for="hex-grid-hideIncomplete">Hide incomplete hexes at edges</label>
+      </div>
     </div>
   </div>
 
@@ -762,7 +766,7 @@ const PRESETS = {
   'ruled':       { spacing: 7, lineWeight: 0.3, margins: [15,15,25,15], color: 0, opacity: 0.4, marginLine: false, marginLineColor: [0.89, 0.27, 0.27], marginLineWeight: 0.5, marginLinePosition: 15, headerLine: false, headerLineWeight: 0.6, midlines: false },
   'square-grid': { spacing: 5, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.4, majorInterval: 0, majorWeight: 0.5, majorOpacity: 0.7 },
   'isometric':   { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, mode: 'lines', dotSize: 0.8 },
-  'hex-grid':    { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, orientation: 'flat-top', mode: 'lines', dotSize: 0.8 },
+  'hex-grid':    { spacing: 7, lineWeight: 0.25, margins: [15,15,15,15], color: 0, opacity: 0.35, orientation: 'flat-top', mode: 'lines', dotSize: 0.8, hideIncomplete: false },
   'cornell': {
     letter: { cueWidth: 63.5, summaryHeight: 50.8, lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 },
     a4:     { cueWidth: 60,   summaryHeight: 48,   lineSpacing: 7, lineWeight: 0.3, dividerWeight: 0.8, margins: [15,15,15,15], color: 0, opacity: 0.4, fillPattern: 'ruled', dotSize: 0.8, gridWeight: 0.25 }
@@ -1012,7 +1016,7 @@ function drawIsometric(page, config) {
 }
 function drawHexGrid(page, config) {
   const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity,
-          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
+          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346, hideIncomplete = false } = config;
   const left = marginLeft;
   const right = paperW - marginRight;
   const bottom = marginBottom;
@@ -1020,6 +1024,15 @@ function drawHexGrid(page, config) {
   const [r, g, b] = color;
   const c = rgb(r, g, b);
   const R = spacing;
+
+  function hexComplete(hx, hy, aOff) {
+    for (let k = 0; k < 6; k++) {
+      const vx = hx + R * Math.cos(aOff + k * Math.PI / 3);
+      const vy = hy + R * Math.sin(aOff + k * Math.PI / 3);
+      if (vx < left || vx > right || vy < bottom || vy > top) return false;
+    }
+    return true;
+  }
 
   if (mode === 'lines') {
     function clipLine(x1, y1, x2, y2) {
@@ -1053,6 +1066,7 @@ function drawHexGrid(page, config) {
       for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
+          if (hideIncomplete && !hexComplete(cx, cy, 0)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(k * Math.PI / 3);
@@ -1069,6 +1083,7 @@ function drawHexGrid(page, config) {
       for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
+          if (hideIncomplete && !hexComplete(cx, cy, Math.PI / 6)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
@@ -1384,7 +1399,7 @@ function previewIsometric(ctx, config) {
 }
 function previewHexGrid(ctx, config) {
   const { paperW, paperH, spacing, lineWeight, marginTop, marginRight, marginBottom, marginLeft, color, opacity, canvasHeight, scale,
-          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346 } = config;
+          orientation = 'flat-top', mode = 'lines', dotSize = 0.8 * 2.8346, hideIncomplete = false } = config;
   const [r, g, b] = color;
 
   const cLeft = marginLeft * scale;
@@ -1400,6 +1415,15 @@ function previewHexGrid(ctx, config) {
   const R = spacing;
   const Rc = R * scale;
 
+  function hexFits(hx, hy, aOff) {
+    for (let k = 0; k < 6; k++) {
+      const vx = hx + Rc * Math.cos(aOff + k * Math.PI / 3);
+      const vy = hy + Rc * Math.sin(aOff + k * Math.PI / 3);
+      if (vx < cLeft || vx > cRight || vy < cTop || vy > cBottom) return false;
+    }
+    return true;
+  }
+
   if (mode === 'lines') {
     ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
     ctx.lineWidth = lineWeight * scale;
@@ -1411,6 +1435,7 @@ function previewHexGrid(ctx, config) {
       for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
+          if (hideIncomplete && !hexFits(cx, cy, 0)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(k * Math.PI / 3);
@@ -1428,6 +1453,7 @@ function previewHexGrid(ctx, config) {
       for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
+          if (hideIncomplete && !hexFits(cx, cy, Math.PI / 6)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
@@ -1628,6 +1654,7 @@ function getConfig() {
       orientation:  document.getElementById('hex-grid-orientation').value,
       mode:         document.getElementById('hex-grid-mode').value,
       dotSize:      parseFloat(document.getElementById('hex-grid-dotSize').value)      * UF,
+      hideIncomplete: document.getElementById('hex-grid-hideIncomplete').checked,
     };
   } else if (type === 'cornell') {
     params = {
@@ -1744,6 +1771,7 @@ function loadPreset(type) {
     document.getElementById('hex-grid-mode').value = preset.mode ?? 'lines';
     document.getElementById('hex-grid-dotSize').value = preset.dotSize ?? 0.8;
     document.getElementById('hex-grid-dotSize-field').style.display = (preset.mode ?? 'lines') === 'dots' ? '' : 'none';
+    document.getElementById('hex-grid-hideIncomplete').checked = preset.hideIncomplete ?? false;
   } else if (type === 'cornell') {
     document.getElementById('cornell-cueWidth').value       = preset.cueWidth;
     document.getElementById('cornell-summaryHeight').value  = preset.summaryHeight;
@@ -2116,6 +2144,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('hex-grid-orientation').addEventListener('change', () => {
     updateHexDiagram();
+    updatePreview();
+  });
+
+  document.getElementById('hex-grid-hideIncomplete').addEventListener('change', () => {
     updatePreview();
   });
 
