@@ -643,7 +643,15 @@
       </div>
       <div class="config">
         <div class="field">
-          <label>Side Length (mm)</label>
+          <label>Sizing</label>
+          <select id="hex-grid-sizing" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+            <option value="side" selected>Side Length</option>
+            <option value="flat-to-flat">Flat-to-Flat Diameter</option>
+            <option value="point-to-point">Point-to-Point Diameter</option>
+          </select>
+        </div>
+        <div class="field">
+          <label id="hex-grid-spacing-label">Side Length (mm)</label>
           <input type="number" id="hex-grid-spacing" min="3" max="20" step="0.5" value="7">
         </div>
         <div class="field">
@@ -762,6 +770,20 @@ const PRESETS = {
 };
 const { PDFDocument, rgb } = PDFLib;
 let currentUnit = 'mm';
+let hexSizingMode = 'side';
+const SQRT3 = Math.sqrt(3);
+
+function hexInputToSide(val, mode) {
+  if (mode === 'flat-to-flat') return val / SQRT3;
+  if (mode === 'point-to-point') return val / 2;
+  return val;
+}
+
+function sideToHexInput(sideLen, mode) {
+  if (mode === 'flat-to-flat') return sideLen * SQRT3;
+  if (mode === 'point-to-point') return sideLen * 2;
+  return sideLen;
+}
 
 function unitFactor() {
   return currentUnit === 'mm' ? MM : 72;
@@ -1595,8 +1617,9 @@ function getConfig() {
       dotSize: parseFloat(document.getElementById('isometric-dotSize').value) * UF,
     };
   } else if (type === 'hex-grid') {
+    const hexRaw = parseFloat(document.getElementById('hex-grid-spacing').value);
     params = {
-      spacing:      parseFloat(document.getElementById('hex-grid-spacing').value)      * UF,
+      spacing:      hexInputToSide(hexRaw, hexSizingMode) * UF,
       lineWeight:   parseFloat(document.getElementById('hex-grid-lineWeight').value)   * UF,
       marginTop:    parseFloat(document.getElementById('hex-grid-marginTop').value)    * UF,
       marginRight:  parseFloat(document.getElementById('hex-grid-marginRight').value)  * UF,
@@ -1708,6 +1731,9 @@ function loadPreset(type) {
     document.getElementById('isometric-dotSize').value = preset.dotSize ?? 0.8;
     document.getElementById('isometric-dotSize-field').style.display = (preset.mode ?? 'lines') === 'dots' ? '' : 'none';
   } else if (type === 'hex-grid') {
+    document.getElementById('hex-grid-sizing').value = 'side';
+    hexSizingMode = 'side';
+    document.getElementById('hex-grid-spacing-label').textContent = 'Side Length ' + (currentUnit === 'in' ? '(in)' : '(mm)');
     document.getElementById('hex-grid-spacing').value    = preset.spacing;
     document.getElementById('hex-grid-lineWeight').value = preset.lineWeight;
     document.getElementById('hex-grid-marginTop').value    = margins[0];
@@ -1785,10 +1811,10 @@ function updateHexDiagram() {
   ctx.clearRect(0, 0, W, H);
 
   const orientation = document.getElementById('hex-grid-orientation').value;
-  const spacing = parseFloat(document.getElementById('hex-grid-spacing').value) || 7;
+  const inputVal = parseFloat(document.getElementById('hex-grid-spacing').value) || 7;
   const unit = currentUnit === 'in' ? 'in' : 'mm';
   const flatTop = orientation === 'flat-top';
-  const S3 = Math.sqrt(3);
+  const sizing = hexSizingMode;
 
   const cx = W / 2;
   const cy = H / 2 - 4;
@@ -1808,77 +1834,95 @@ function updateHexDiagram() {
   ctx.closePath();
   ctx.stroke();
 
-  const sideA = flatTop ? 4 : 3;
-  const sideB = (sideA + 1) % 6;
-  const [ax, ay] = verts[sideA];
-  const [bx, by] = verts[sideB];
+  let ax, ay, bx, by;
+  const accent = '#e94560';
 
-  ctx.strokeStyle = '#e94560';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bx, by);
-  ctx.stroke();
+  if (sizing === 'side') {
+    const sA = flatTop ? 4 : 3;
+    [ax, ay] = verts[sA];
+    [bx, by] = verts[(sA + 1) % 6];
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+  } else if (sizing === 'flat-to-flat') {
+    const s1a = flatTop ? 4 : 2, s1b = flatTop ? 5 : 3;
+    const s2a = flatTop ? 1 : 5, s2b = flatTop ? 2 : 0;
+    ax = (verts[s1a][0] + verts[s1b][0]) / 2;
+    ay = (verts[s1a][1] + verts[s1b][1]) / 2;
+    bx = (verts[s2a][0] + verts[s2b][0]) / 2;
+    by = (verts[s2a][1] + verts[s2b][1]) / 2;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(...verts[s1a]); ctx.lineTo(...verts[s1b]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(...verts[s2a]); ctx.lineTo(...verts[s2b]); ctx.stroke();
+
+  } else {
+    const vA = flatTop ? 3 : 4, vB = flatTop ? 0 : 1;
+    [ax, ay] = verts[vA];
+    [bx, by] = verts[vB];
+    ctx.fillStyle = accent;
+    [verts[vA], verts[vB]].forEach(([vx, vy]) => {
+      ctx.beginPath(); ctx.arc(vx, vy, 4, 0, Math.PI * 2); ctx.fill();
+    });
+  }
 
   const dx = bx - ax, dy = by - ay;
   const len = Math.sqrt(dx * dx + dy * dy);
   const nx = -dy / len, ny = dx / len;
-  const off = 14;
+  const needsOff = sizing === 'side';
+  const off = needsOff ? 14 : 0;
   const dax = ax + nx * off, day = ay + ny * off;
   const dbx = bx + nx * off, dby = by + ny * off;
 
-  ctx.strokeStyle = '#e94560';
+  ctx.strokeStyle = accent;
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
 
-  ctx.beginPath();
-  ctx.moveTo(ax + nx * 4, ay + ny * 4);
-  ctx.lineTo(dax + nx * 2, day + ny * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(bx + nx * 4, by + ny * 4);
-  ctx.lineTo(dbx + nx * 2, dby + ny * 2);
-  ctx.stroke();
+  if (needsOff) {
+    ctx.beginPath(); ctx.moveTo(ax + nx * 4, ay + ny * 4); ctx.lineTo(dax + nx * 2, day + ny * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx + nx * 4, by + ny * 4); ctx.lineTo(dbx + nx * 2, dby + ny * 2); ctx.stroke();
+  }
 
-  ctx.beginPath();
-  ctx.moveTo(dax, day);
-  ctx.lineTo(dbx, dby);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(dax, day); ctx.lineTo(dbx, dby); ctx.stroke();
 
-  const arrowSize = 5;
-  function drawArrow(px, py, dirx, diry) {
-    const ndx = dirx / len, ndy = diry / len;
+  const arrowSz = 5;
+  function arrow(px, py, dirx, diry) {
+    const ux = dirx / len, uy = diry / len;
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(px - ndx * arrowSize + ndy * arrowSize * 0.4, py - ndy * arrowSize - ndx * arrowSize * 0.4);
+    ctx.lineTo(px - ux * arrowSz + uy * arrowSz * 0.4, py - uy * arrowSz - ux * arrowSz * 0.4);
     ctx.moveTo(px, py);
-    ctx.lineTo(px - ndx * arrowSize - ndy * arrowSize * 0.4, py - ndy * arrowSize + ndx * arrowSize * 0.4);
+    ctx.lineTo(px - ux * arrowSz - uy * arrowSz * 0.4, py - uy * arrowSz + ux * arrowSz * 0.4);
     ctx.stroke();
   }
-  drawArrow(dax, day, -dx, -dy);
-  drawArrow(dbx, dby, dx, dy);
+  arrow(dax, day, -dx, -dy);
+  arrow(dbx, dby, dx, dy);
 
-  const midX = (dax + dbx) / 2 + nx * 12;
-  const midY = (day + dby) / 2 + ny * 12;
-  ctx.fillStyle = '#e94560';
+  const labelOff = needsOff ? 12 : 10;
+  const midX = (dax + dbx) / 2 + nx * labelOff;
+  const midY = (day + dby) / 2 + ny * labelOff;
+  ctx.fillStyle = accent;
   ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(spacing + ' ' + unit, midX, midY);
+  ctx.fillText(inputVal + ' ' + unit, midX, midY);
 
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
 
-  const hexW = flatTop ? 2 * spacing : S3 * spacing;
-  const hexH = flatTop ? S3 * spacing : 2 * spacing;
-  const decimals = currentUnit === 'in' ? 3 : 1;
+  const sideLen = hexInputToSide(inputVal, sizing);
+  const hexW = flatTop ? 2 * sideLen : SQRT3 * sideLen;
+  const hexH = flatTop ? SQRT3 * sideLen : 2 * sideLen;
+  const dec = currentUnit === 'in' ? 3 : 1;
   const dimsEl = document.getElementById('hexDims');
   if (dimsEl) {
     dimsEl.innerHTML =
-      'Width: <strong>' + hexW.toFixed(decimals) + ' ' + unit + '</strong>' +
-      ' · Height: <strong>' + hexH.toFixed(decimals) + ' ' + unit + '</strong>';
+      'Width: <strong>' + hexW.toFixed(dec) + ' ' + unit + '</strong>' +
+      ' · Height: <strong>' + hexH.toFixed(dec) + ' ' + unit + '</strong>';
   }
 }
 
@@ -2071,6 +2115,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('hex-grid-orientation').addEventListener('change', () => {
+    updateHexDiagram();
+    updatePreview();
+  });
+
+  document.getElementById('hex-grid-sizing').addEventListener('change', () => {
+    const newMode = document.getElementById('hex-grid-sizing').value;
+    const input = document.getElementById('hex-grid-spacing');
+    const label = document.getElementById('hex-grid-spacing-label');
+    const oldVal = parseFloat(input.value);
+    const sideLen = hexInputToSide(oldVal, hexSizingMode);
+    const newVal = sideToHexInput(sideLen, newMode);
+    const dec = currentUnit === 'in' ? 3 : 2;
+    input.value = +newVal.toFixed(dec);
+    hexSizingMode = newMode;
+    const names = { side: 'Side Length', 'flat-to-flat': 'Flat-to-Flat', 'point-to-point': 'Point-to-Point' };
+    const unitSuffix = currentUnit === 'in' ? '(in)' : '(mm)';
+    label.textContent = names[newMode] + ' ' + unitSuffix;
     updateHexDiagram();
     updatePreview();
   });
