@@ -1025,16 +1025,6 @@ function drawHexGrid(page, config) {
   const c = rgb(r, g, b);
   const R = spacing;
 
-  function hexComplete(hx, hy, aOff) {
-    const e = 0.5;
-    for (let k = 0; k < 6; k++) {
-      const vx = hx + R * Math.cos(aOff + k * Math.PI / 3);
-      const vy = hy + R * Math.sin(aOff + k * Math.PI / 3);
-      if (vx < left - e || vx > right + e || vy < bottom - e || vy > top + e) return false;
-    }
-    return true;
-  }
-
   if (mode === 'lines') {
     function clipLine(x1, y1, x2, y2) {
       let tMin = 0, tMax = 1;
@@ -1067,7 +1057,7 @@ function drawHexGrid(page, config) {
       for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
-          if (hideIncomplete && !hexComplete(cx, cy, 0)) continue;
+          if (hideIncomplete && (cx < left || cx > right || cy < bottom || cy > top)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(k * Math.PI / 3);
@@ -1084,7 +1074,7 @@ function drawHexGrid(page, config) {
       for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
-          if (hideIncomplete && !hexComplete(cx, cy, Math.PI / 6)) continue;
+          if (hideIncomplete && (cx < left || cx > right || cy < bottom || cy > top)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
@@ -1416,16 +1406,6 @@ function previewHexGrid(ctx, config) {
   const R = spacing;
   const Rc = R * scale;
 
-  function hexFits(hx, hy, aOff) {
-    const e = 0.5;
-    for (let k = 0; k < 6; k++) {
-      const vx = hx + Rc * Math.cos(aOff + k * Math.PI / 3);
-      const vy = hy + Rc * Math.sin(aOff + k * Math.PI / 3);
-      if (vx < cLeft - e || vx > cRight + e || vy < cTop - e || vy > cBottom + e) return false;
-    }
-    return true;
-  }
-
   if (mode === 'lines') {
     ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
     ctx.lineWidth = lineWeight * scale;
@@ -1437,7 +1417,7 @@ function previewHexGrid(ctx, config) {
       for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
-          if (hideIncomplete && !hexFits(cx, cy, 0)) continue;
+          if (hideIncomplete && (cx < cLeft || cx > cRight || cy < cTop || cy > cBottom)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(k * Math.PI / 3);
@@ -1455,7 +1435,7 @@ function previewHexGrid(ctx, config) {
       for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
-          if (hideIncomplete && !hexFits(cx, cy, Math.PI / 6)) continue;
+          if (hideIncomplete && (cx < cLeft || cx > cRight || cy < cTop || cy > cBottom)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
