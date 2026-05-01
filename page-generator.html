@@ -1026,10 +1026,11 @@ function drawHexGrid(page, config) {
   const R = spacing;
 
   function hexComplete(hx, hy, aOff) {
+    const e = 0.5;
     for (let k = 0; k < 6; k++) {
       const vx = hx + R * Math.cos(aOff + k * Math.PI / 3);
       const vy = hy + R * Math.sin(aOff + k * Math.PI / 3);
-      if (vx < left || vx > right || vy < bottom || vy > top) return false;
+      if (vx < left - e || vx > right + e || vy < bottom - e || vy > top + e) return false;
     }
     return true;
   }
@@ -1416,10 +1417,11 @@ function previewHexGrid(ctx, config) {
   const Rc = R * scale;
 
   function hexFits(hx, hy, aOff) {
+    const e = 0.5;
     for (let k = 0; k < 6; k++) {
       const vx = hx + Rc * Math.cos(aOff + k * Math.PI / 3);
       const vy = hy + Rc * Math.sin(aOff + k * Math.PI / 3);
-      if (vx < cLeft || vx > cRight || vy < cTop || vy > cBottom) return false;
+      if (vx < cLeft - e || vx > cRight + e || vy < cTop - e || vy > cBottom + e) return false;
     }
     return true;
   }
