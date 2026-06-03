@@ -1064,70 +1064,146 @@ function drawHexGrid(page, config) {
   const R = spacing;
 
   if (mode === 'lines') {
-    function clipLine(x1, y1, x2, y2) {
-      let tMin = 0, tMax = 1;
-      const dx = x2 - x1, dy = y2 - y1;
-      function clip(p, q) {
-        if (p === 0) return q >= 0;
-        const t = q / p;
-        if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
-        else { if (t < tMin) return false; if (t < tMax) tMax = t; }
-        return true;
+    const S3 = Math.sqrt(3);
+
+    if (hideIncomplete) {
+      // Centered grid with deduplicated edges.
+      // Shared edges between adjacent hexes are drawn exactly once,
+      // so boundary edges have the same weight as interior edges.
+      const W = right - left, H = top - bottom;
+      const edges = new Set();
+      const lineBuf = [];
+
+      function addEdge(x1, y1, x2, y2) {
+        const p = 100;
+        const ax = Math.round(x1 * p), ay = Math.round(y1 * p);
+        const bx = Math.round(x2 * p), by = Math.round(y2 * p);
+        const key = (ax < bx || (ax === bx && ay < by))
+          ? ax + ',' + ay + ',' + bx + ',' + by
+          : bx + ',' + by + ',' + ax + ',' + ay;
+        if (edges.has(key)) return;
+        edges.add(key);
+        lineBuf.push([x1, y1, x2, y2]);
       }
-      if (!clip(-dx, x1 - left)) return null;
-      if (!clip(dx, right - x1)) return null;
-      if (!clip(-dy, y1 - bottom)) return null;
-      if (!clip(dy, top - y1)) return null;
-      return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
-    }
 
-    function drawClipped(x1, y1, x2, y2) {
-      const clipped = clipLine(x1, y1, x2, y2);
-      if (!clipped) return;
-      const [cx1, cy1, cx2, cy2] = clipped;
-      page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
-    }
+      if (orientation === 'flat-top') {
+        const colStep = 1.5 * R;
+        const rowStep = S3 * R;
+        const hexHalfH = S3 * R / 2;
 
-    function hexFullyInside(hx, hy, radius, angleOff, minX, maxX, minY, maxY) {
-      for (let k = 0; k < 6; k++) {
-        const vx = hx + radius * Math.cos(angleOff + k * Math.PI / 3);
-        const vy = hy + radius * Math.sin(angleOff + k * Math.PI / 3);
-        if (vx < minX || vx > maxX || vy < minY || vy > maxY) return false;
-      }
-      return true;
-    }
+        const nCols = Math.max(1, Math.floor((W - 2 * R) / colStep) + 1);
+        const hasStagger = nCols > 1;
+        const nRows = Math.max(1, Math.floor((H - (hasStagger ? rowStep / 2 : 0) - 2 * hexHalfH) / rowStep) + 1);
 
-    if (orientation === 'flat-top') {
-      const colStep = 1.5 * R;
-      const rowStep = Math.sqrt(3) * R;
-      let colIdx = 0;
-      for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
-        const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
-        for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
-          if (hideIncomplete && !hexFullyInside(cx, cy, R, 0, left, right, bottom, top)) continue;
-          for (let k = 0; k < 6; k++) {
-            const vx1 = cx + R * Math.cos(k * Math.PI / 3);
-            const vy1 = cy + R * Math.sin(k * Math.PI / 3);
-            const vx2 = cx + R * Math.cos((k + 1) * Math.PI / 3);
-            const vy2 = cy + R * Math.sin((k + 1) * Math.PI / 3);
-            drawClipped(vx1, vy1, vx2, vy2);
+        const gridW = (nCols - 1) * colStep + 2 * R;
+        const gridH = (nRows - 1) * rowStep + (hasStagger ? rowStep / 2 : 0) + 2 * hexHalfH;
+        if (gridW > W || gridH > H) return;
+
+        const startX = left + (W - gridW) / 2 + R;
+        const startY = bottom + (H - gridH) / 2 + hexHalfH;
+
+        for (let col = 0; col < nCols; col++) {
+          const hx = startX + col * colStep;
+          const yOff = (col % 2 === 1) ? rowStep / 2 : 0;
+          for (let row = 0; row < nRows; row++) {
+            const hy = startY + row * rowStep + yOff;
+            for (let k = 0; k < 6; k++) {
+              addEdge(
+                hx + R * Math.cos(k * Math.PI / 3),       hy + R * Math.sin(k * Math.PI / 3),
+                hx + R * Math.cos((k + 1) * Math.PI / 3), hy + R * Math.sin((k + 1) * Math.PI / 3));
+            }
+          }
+        }
+      } else {
+        const rowStep = 1.5 * R;
+        const colStep = S3 * R;
+        const hexHalfW = S3 * R / 2;
+
+        const nRows = Math.max(1, Math.floor((H - 2 * R) / rowStep) + 1);
+        const hasStagger = nRows > 1;
+        const nCols = Math.max(1, Math.floor((W - (hasStagger ? colStep / 2 : 0) - 2 * hexHalfW) / colStep) + 1);
+
+        const gridH = (nRows - 1) * rowStep + 2 * R;
+        const gridW = (nCols - 1) * colStep + (hasStagger ? colStep / 2 : 0) + 2 * hexHalfW;
+        if (gridW > W || gridH > H) return;
+
+        const startX = left + (W - gridW) / 2 + hexHalfW;
+        const startY = bottom + (H - gridH) / 2 + R;
+
+        for (let row = 0; row < nRows; row++) {
+          const hy = startY + row * rowStep;
+          const xOff = (row % 2 === 1) ? colStep / 2 : 0;
+          for (let col = 0; col < nCols; col++) {
+            const hx = startX + col * colStep + xOff;
+            for (let k = 0; k < 6; k++) {
+              addEdge(
+                hx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3),       hy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3),
+                hx + R * Math.cos(Math.PI / 6 + (k + 1) * Math.PI / 3), hy + R * Math.sin(Math.PI / 6 + (k + 1) * Math.PI / 3));
+            }
           }
         }
       }
+
+      for (const [x1, y1, x2, y2] of lineBuf) {
+        page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: lineWeight, color: c, opacity });
+      }
+
     } else {
-      const rowStep = 1.5 * R;
-      const colStep = Math.sqrt(3) * R;
-      let rowIdx = 0;
-      for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
-        const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
-        for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
-          if (hideIncomplete && !hexFullyInside(cx, cy, R, Math.PI / 6, left, right, bottom, top)) continue;
-          for (let k = 0; k < 6; k++) {
-            const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
-            const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
-            const vx2 = cx + R * Math.cos(Math.PI / 6 + (k + 1) * Math.PI / 3);
-            const vy2 = cy + R * Math.sin(Math.PI / 6 + (k + 1) * Math.PI / 3);
-            drawClipped(vx1, vy1, vx2, vy2);
+      // Normal mode: draw from edge to edge with line clipping
+      function clipLine(x1, y1, x2, y2) {
+        let tMin = 0, tMax = 1;
+        const dx = x2 - x1, dy = y2 - y1;
+        function clip(p, q) {
+          if (p === 0) return q >= 0;
+          const t = q / p;
+          if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
+          else { if (t < tMin) return false; if (t < tMax) tMax = t; }
+          return true;
+        }
+        if (!clip(-dx, x1 - left)) return null;
+        if (!clip(dx, right - x1)) return null;
+        if (!clip(-dy, y1 - bottom)) return null;
+        if (!clip(dy, top - y1)) return null;
+        return [x1 + tMin * dx, y1 + tMin * dy, x1 + tMax * dx, y1 + tMax * dy];
+      }
+
+      function drawClipped(x1, y1, x2, y2) {
+        const clipped = clipLine(x1, y1, x2, y2);
+        if (!clipped) return;
+        const [cx1, cy1, cx2, cy2] = clipped;
+        page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
+      }
+
+      if (orientation === 'flat-top') {
+        const colStep = 1.5 * R;
+        const rowStep = S3 * R;
+        let colIdx = 0;
+        for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
+          const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
+          for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
+            for (let k = 0; k < 6; k++) {
+              const vx1 = cx + R * Math.cos(k * Math.PI / 3);
+              const vy1 = cy + R * Math.sin(k * Math.PI / 3);
+              const vx2 = cx + R * Math.cos((k + 1) * Math.PI / 3);
+              const vy2 = cy + R * Math.sin((k + 1) * Math.PI / 3);
+              drawClipped(vx1, vy1, vx2, vy2);
+            }
+          }
+        }
+      } else {
+        const rowStep = 1.5 * R;
+        const colStep = S3 * R;
+        let rowIdx = 0;
+        for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
+          const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
+          for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
+            for (let k = 0; k < 6; k++) {
+              const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
+              const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
+              const vx2 = cx + R * Math.cos(Math.PI / 6 + (k + 1) * Math.PI / 3);
+              const vy2 = cy + R * Math.sin(Math.PI / 6 + (k + 1) * Math.PI / 3);
+              drawClipped(vx1, vy1, vx2, vy2);
+            }
           }
         }
       }
@@ -1456,50 +1532,126 @@ function previewHexGrid(ctx, config) {
   if (mode === 'lines') {
     ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
     ctx.lineWidth = lineWeight * scale;
+    const S3 = Math.sqrt(3);
 
-    function hexFullyInsideCanvas(hx, hy, radius, angleOff, minX, maxX, minY, maxY) {
-      for (let k = 0; k < 6; k++) {
-        const vx = hx + radius * Math.cos(angleOff + k * Math.PI / 3);
-        const vy = hy + radius * Math.sin(angleOff + k * Math.PI / 3);
-        if (vx < minX || vx > maxX || vy < minY || vy > maxY) return false;
+    if (hideIncomplete) {
+      // Centered grid with deduplicated edges (mirrors PDF drawHexGrid logic)
+      const W = cRight - cLeft, H = cBottom - cTop;
+      const edges = new Set();
+      const lineBuf = [];
+
+      function addEdgeC(x1, y1, x2, y2) {
+        const p = 100;
+        const ax = Math.round(x1 * p), ay = Math.round(y1 * p);
+        const bx = Math.round(x2 * p), by = Math.round(y2 * p);
+        const key = (ax < bx || (ax === bx && ay < by))
+          ? ax + ',' + ay + ',' + bx + ',' + by
+          : bx + ',' + by + ',' + ax + ',' + ay;
+        if (edges.has(key)) return;
+        edges.add(key);
+        lineBuf.push([x1, y1, x2, y2]);
       }
-      return true;
-    }
 
-    if (orientation === 'flat-top') {
-      const colStep = 1.5 * Rc;
-      const rowStep = Math.sqrt(3) * Rc;
-      let colIdx = 0;
-      for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
-        const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
-        for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
-          if (hideIncomplete && !hexFullyInsideCanvas(cx, cy, Rc, 0, cLeft, cRight, cTop, cBottom)) continue;
-          ctx.beginPath();
-          for (let k = 0; k < 6; k++) {
-            const vx = cx + Rc * Math.cos(k * Math.PI / 3);
-            const vy = cy + Rc * Math.sin(k * Math.PI / 3);
-            if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+      if (orientation === 'flat-top') {
+        const colStep = 1.5 * Rc;
+        const rowStep = S3 * Rc;
+        const hexHalfH = S3 * Rc / 2;
+
+        const nCols = Math.max(1, Math.floor((W - 2 * Rc) / colStep) + 1);
+        const hasStagger = nCols > 1;
+        const nRows = Math.max(1, Math.floor((H - (hasStagger ? rowStep / 2 : 0) - 2 * hexHalfH) / rowStep) + 1);
+
+        const gridW = (nCols - 1) * colStep + 2 * Rc;
+        const gridH = (nRows - 1) * rowStep + (hasStagger ? rowStep / 2 : 0) + 2 * hexHalfH;
+        if (gridW > W || gridH > H) { ctx.restore(); return; }
+
+        const startX = cLeft + (W - gridW) / 2 + Rc;
+        const startY = cTop + (H - gridH) / 2 + hexHalfH;
+
+        for (let col = 0; col < nCols; col++) {
+          const hx = startX + col * colStep;
+          const yOff = (col % 2 === 1) ? rowStep / 2 : 0;
+          for (let row = 0; row < nRows; row++) {
+            const hy = startY + row * rowStep + yOff;
+            for (let k = 0; k < 6; k++) {
+              addEdgeC(
+                hx + Rc * Math.cos(k * Math.PI / 3),       hy + Rc * Math.sin(k * Math.PI / 3),
+                hx + Rc * Math.cos((k + 1) * Math.PI / 3), hy + Rc * Math.sin((k + 1) * Math.PI / 3));
+            }
           }
-          ctx.closePath();
-          ctx.stroke();
+        }
+      } else {
+        const rowStep = 1.5 * Rc;
+        const colStep = S3 * Rc;
+        const hexHalfW = S3 * Rc / 2;
+
+        const nRows = Math.max(1, Math.floor((H - 2 * Rc) / rowStep) + 1);
+        const hasStagger = nRows > 1;
+        const nCols = Math.max(1, Math.floor((W - (hasStagger ? colStep / 2 : 0) - 2 * hexHalfW) / colStep) + 1);
+
+        const gridH = (nRows - 1) * rowStep + 2 * Rc;
+        const gridW = (nCols - 1) * colStep + (hasStagger ? colStep / 2 : 0) + 2 * hexHalfW;
+        if (gridW > W || gridH > H) { ctx.restore(); return; }
+
+        const startX = cLeft + (W - gridW) / 2 + hexHalfW;
+        const startY = cTop + (H - gridH) / 2 + Rc;
+
+        for (let row = 0; row < nRows; row++) {
+          const hy = startY + row * rowStep;
+          const xOff = (row % 2 === 1) ? colStep / 2 : 0;
+          for (let col = 0; col < nCols; col++) {
+            const hx = startX + col * colStep + xOff;
+            for (let k = 0; k < 6; k++) {
+              addEdgeC(
+                hx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3),       hy + Rc * Math.sin(Math.PI / 6 + k * Math.PI / 3),
+                hx + Rc * Math.cos(Math.PI / 6 + (k + 1) * Math.PI / 3), hy + Rc * Math.sin(Math.PI / 6 + (k + 1) * Math.PI / 3));
+            }
+          }
         }
       }
+
+      for (const [x1, y1, x2, y2] of lineBuf) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
     } else {
-      const rowStep = 1.5 * Rc;
-      const colStep = Math.sqrt(3) * Rc;
-      let rowIdx = 0;
-      for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
-        const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
-        for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
-          if (hideIncomplete && !hexFullyInsideCanvas(cx, cy, Rc, Math.PI / 6, cLeft, cRight, cTop, cBottom)) continue;
-          ctx.beginPath();
-          for (let k = 0; k < 6; k++) {
-            const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
-            const vy = cy + Rc * Math.sin(Math.PI / 6 + k * Math.PI / 3);
-            if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+      // Normal mode: draw per-hex with canvas clip region
+      if (orientation === 'flat-top') {
+        const colStep = 1.5 * Rc;
+        const rowStep = S3 * Rc;
+        let colIdx = 0;
+        for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
+          const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
+          for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
+            ctx.beginPath();
+            for (let k = 0; k < 6; k++) {
+              const vx = cx + Rc * Math.cos(k * Math.PI / 3);
+              const vy = cy + Rc * Math.sin(k * Math.PI / 3);
+              if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+            ctx.stroke();
           }
-          ctx.closePath();
-          ctx.stroke();
+        }
+      } else {
+        const rowStep = 1.5 * Rc;
+        const colStep = S3 * Rc;
+        let rowIdx = 0;
+        for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
+          const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
+          for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
+            ctx.beginPath();
+            for (let k = 0; k < 6; k++) {
+              const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
+              const vy = cy + Rc * Math.sin(Math.PI / 6 + k * Math.PI / 3);
+              if (k === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          }
         }
       }
     }
