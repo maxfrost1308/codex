@@ -739,12 +739,17 @@
       </div>
     </div>
     <div class="paper-toggle">
+      <button class="paper-btn active" data-orient="portrait">Portrait</button>
+      <button class="paper-btn" data-orient="landscape">Landscape</button>
+    </div>
+    <div class="paper-toggle">
       <button class="paper-btn active" data-unit="mm">mm</button>
       <button class="paper-btn" data-unit="in">in</button>
     </div>
   </div>
 
-  <!-- Color swatches -->
+  <!-- Grid color -->
+  <div class="field"><label style="margin-bottom: 2px;">Grid Color</label></div>
   <div class="color-palette">
     <button class="swatch active" data-name="Light Gray" data-rgb="0.75,0.75,0.75" style="background:#BFBFBF" title="Light Gray"></button>
     <button class="swatch" data-name="Blue" data-rgb="0.60,0.73,0.89" style="background:#99BAE3" title="Blue"></button>
@@ -753,10 +758,32 @@
     <button class="swatch" data-name="Black" data-rgb="0.00,0.00,0.00" style="background:#000000" title="Black"></button>
   </div>
 
+  <!-- Page background -->
+  <div class="field" style="margin-top: 12px;"><label style="margin-bottom: 2px;">Page Background</label></div>
+  <div class="color-palette" id="bgPalette">
+    <button class="swatch active" data-bg-rgb="1,1,1" style="background:#FFFFFF; border: 1px solid var(--border);" title="White"></button>
+    <button class="swatch" data-bg-rgb="1,0.98,0.92" style="background:#FFFAEB" title="Cream"></button>
+    <button class="swatch" data-bg-rgb="0.96,0.92,0.84" style="background:#F5EBD7" title="Sepia"></button>
+    <button class="swatch" data-bg-rgb="0.93,0.96,1" style="background:#EDF5FF" title="Blue Tint"></button>
+    <button class="swatch" data-bg-rgb="0.95,0.95,0.95" style="background:#F2F2F2" title="Light Gray"></button>
+  </div>
+
   <!-- Opacity slider -->
   <div class="field">
     <label>Opacity: <span id="opacityLabel">0.50</span></label>
     <input type="range" id="opacitySlider" min="0.05" max="1" step="0.05" value="0.5">
+  </div>
+
+  <!-- Page border -->
+  <div class="checkbox-field" style="margin-top: 12px;">
+    <input type="checkbox" id="pageBorder">
+    <label for="pageBorder">Page border</label>
+  </div>
+  <div id="pageBorder-controls" style="display:none; margin-top: 4px;">
+    <div class="field">
+      <label>Border Weight (mm)</label>
+      <input type="number" id="pageBorderWeight" min="0.1" max="3" step="0.1" value="0.5">
+    </div>
   </div>
 
   <!-- Page count -->
@@ -1786,6 +1813,9 @@ function getConfig() {
     paper = PAPER_SIZES[paperSizeKey];
   }
 
+  const isLandscape = document.querySelector('[data-orient].active').dataset.orient === 'landscape';
+  if (isLandscape) { const tmp = paper.w; paper = { ...paper, w: paper.h, h: tmp }; }
+
   const activeSwatch = document.querySelector('.swatch.active');
   const colorRgb = activeSwatch.dataset.rgb.split(',').map(Number);
 
@@ -1877,6 +1907,12 @@ function getConfig() {
     };
   }
 
+  const border = document.getElementById('pageBorder').checked;
+  const borderWeight = parseFloat(document.getElementById('pageBorderWeight').value) * UF;
+
+  const activeBgSwatch = document.querySelector('#bgPalette .swatch.active');
+  const bgColor = activeBgSwatch ? activeBgSwatch.dataset.bgRgb.split(',').map(Number) : [1, 1, 1];
+
   return {
     type,
     paperW: paper.w,
@@ -1886,6 +1922,9 @@ function getConfig() {
     color: colorRgb,
     opacity,
     pageCount,
+    border,
+    borderWeight,
+    bgColor,
     ...params
   };
 }
@@ -2021,7 +2060,8 @@ function updatePreview() {
   canvas.width  = canvasWidth;
   canvas.height = canvasHeight;
 
-  ctx.fillStyle = '#fff';
+  const [bgR, bgG, bgB] = config.bgColor || [1, 1, 1];
+  ctx.fillStyle = `rgb(${Math.round(bgR * 255)}, ${Math.round(bgG * 255)}, ${Math.round(bgB * 255)})`;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
   const scale = canvasWidth / config.paperW;
@@ -2033,6 +2073,17 @@ function updatePreview() {
   else if (config.type === 'isometric')   previewIsometric(ctx, previewConfig);
   else if (config.type === 'hex-grid') {  previewHexGrid(ctx, previewConfig); updateHexDiagram(); }
   else if (config.type === 'cornell')     previewCornell(ctx, previewConfig);
+
+  if (config.border) {
+    const [br, bg, bb] = config.color;
+    const bx = config.marginLeft * scale;
+    const by = canvasHeight - (config.paperH - config.marginTop) * scale;
+    const bw = (config.paperW - config.marginLeft - config.marginRight) * scale;
+    const bh = (config.paperH - config.marginTop - config.marginBottom) * scale;
+    ctx.strokeStyle = `rgba(${Math.round(br * 255)}, ${Math.round(bg * 255)}, ${Math.round(bb * 255)}, ${config.opacity})`;
+    ctx.lineWidth = config.borderWeight * scale;
+    ctx.strokeRect(bx, by, bw, bh);
+  }
 }
 
 function updateHexDiagram() {
@@ -2203,12 +2254,28 @@ async function generatePDF() {
     for (let i = 0; i < pageCount; i++) {
       const page = pdfDoc.addPage([config.paperW, config.paperH]);
 
+      const [bgR, bgG, bgB] = config.bgColor || [1, 1, 1];
+      if (bgR < 1 || bgG < 1 || bgB < 1) {
+        page.drawRectangle({ x: 0, y: 0, width: config.paperW, height: config.paperH, color: rgb(bgR, bgG, bgB) });
+      }
+
       if (config.type === 'dot-grid')         drawDotGrid(page, config);
       else if (config.type === 'ruled')        drawRuled(page, config);
       else if (config.type === 'square-grid')  drawSquareGrid(page, config);
       else if (config.type === 'isometric')    drawIsometric(page, config);
       else if (config.type === 'hex-grid')     drawHexGrid(page, config);
       else if (config.type === 'cornell')      drawCornell(page, config);
+
+      if (config.border) {
+        const [br, bg, bb] = config.color;
+        page.drawRectangle({
+          x: config.marginLeft, y: config.marginBottom,
+          width: config.paperW - config.marginLeft - config.marginRight,
+          height: config.paperH - config.marginTop - config.marginBottom,
+          borderColor: rgb(br, bg, bb), borderWidth: config.borderWeight,
+          opacity: config.opacity
+        });
+      }
 
       progressFill.style.width = `${((i + 1) / pageCount * 100).toFixed(0)}%`;
       statusText.textContent   = `Processing page ${i + 1} of ${pageCount}...`;
@@ -2279,6 +2346,31 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('customHeight').addEventListener('input', () => {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(updatePreview, 100);
+  });
+
+  // Background color palette
+  document.querySelectorAll('#bgPalette .swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('#bgPalette .swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      updatePreview();
+    });
+  });
+
+  // Page border toggle
+  document.getElementById('pageBorder').addEventListener('change', () => {
+    document.getElementById('pageBorder-controls').style.display =
+      document.getElementById('pageBorder').checked ? '' : 'none';
+    updatePreview();
+  });
+
+  // Orientation toggle
+  document.querySelectorAll('[data-orient]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-orient]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updatePreview();
+    });
   });
 
   // Unit toggle
