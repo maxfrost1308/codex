@@ -702,9 +702,39 @@
 
   <!-- Paper size & unit toggles -->
   <div class="global-controls">
-    <div class="paper-toggle">
-      <button class="paper-btn active" data-size="letter">Letter</button>
-      <button class="paper-btn" data-size="a4">A4</button>
+    <div class="field" style="min-width: 200px;">
+      <label>Paper Size</label>
+      <select id="paperSizeSelect" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 14px; width: 100%;">
+        <optgroup label="US Sizes">
+          <option value="letter" selected>Letter (8.5×11")</option>
+          <option value="legal">Legal (8.5×14")</option>
+          <option value="tabloid">Tabloid (11×17")</option>
+          <option value="halfletter">Half Letter (5.5×8.5")</option>
+        </optgroup>
+        <optgroup label="ISO A Series">
+          <option value="a3">A3 (297×420mm)</option>
+          <option value="a4">A4 (210×297mm)</option>
+          <option value="a5">A5 (148×210mm)</option>
+          <option value="a6">A6 (105×148mm)</option>
+        </optgroup>
+        <optgroup label="ISO B Series">
+          <option value="b4">B4 (250×353mm)</option>
+          <option value="b5">B5 (176×250mm)</option>
+        </optgroup>
+        <optgroup label="Custom">
+          <option value="custom">Custom Size...</option>
+        </optgroup>
+      </select>
+    </div>
+    <div id="customSizeFields" class="config" style="display: none; margin-bottom: 0;">
+      <div class="field">
+        <label id="customWidthLabel">Width (mm)</label>
+        <input type="number" id="customWidth" min="50" max="1000" step="1" value="210">
+      </div>
+      <div class="field">
+        <label id="customHeightLabel">Height (mm)</label>
+        <input type="number" id="customHeight" min="50" max="1000" step="1" value="297">
+      </div>
     </div>
     <div class="paper-toggle">
       <button class="paper-btn active" data-unit="mm">mm</button>
@@ -751,8 +781,16 @@
 <script>
 const MM = 2.8346;
 const PAPER_SIZES = {
-  letter: { name: 'Letter', w: 612, h: 792 },
-  a4:     { name: 'A4', w: 595.28, h: 841.89 }
+  letter:      { name: 'Letter (8.5×11")',   w: 612,    h: 792 },
+  legal:       { name: 'Legal (8.5×14")',     w: 612,    h: 1008 },
+  tabloid:     { name: 'Tabloid (11×17")',    w: 792,    h: 1224 },
+  halfletter:  { name: 'Half Letter (5.5×8.5")', w: 396, h: 612 },
+  a3:          { name: 'A3 (297×420mm)',      w: 841.89, h: 1190.55 },
+  a4:          { name: 'A4 (210×297mm)',      w: 595.28, h: 841.89 },
+  a5:          { name: 'A5 (148×210mm)',      w: 419.53, h: 595.28 },
+  a6:          { name: 'A6 (105×148mm)',      w: 297.64, h: 419.53 },
+  b5:          { name: 'B5 (176×250mm)',      w: 498.90, h: 708.66 },
+  b4:          { name: 'B4 (250×353mm)',      w: 708.66, h: 1000.63 },
 };
 const COLORS = [
   { name: 'Light Gray', rgb: [0.75, 0.75, 0.75], hex: '#BFBFBF' },
@@ -1561,8 +1599,18 @@ function getConfig() {
   const activeTab = document.querySelector('.tab.active');
   const type = activeTab.dataset.type;
 
-  const paperSizeKey = document.querySelector('.paper-btn.active').dataset.size;
-  const paper = PAPER_SIZES[paperSizeKey];
+  const paperSizeKey = document.getElementById('paperSizeSelect').value;
+  let paper;
+  if (paperSizeKey === 'custom') {
+    const UF_paper = unitFactor();
+    paper = {
+      name: 'Custom',
+      w: parseFloat(document.getElementById('customWidth').value) * UF_paper,
+      h: parseFloat(document.getElementById('customHeight').value) * UF_paper
+    };
+  } else {
+    paper = PAPER_SIZES[paperSizeKey];
+  }
 
   const activeSwatch = document.querySelector('.swatch.active');
   const colorRgb = activeSwatch.dataset.rgb.split(',').map(Number);
@@ -1672,8 +1720,8 @@ function getConfig() {
 function loadPreset(type) {
   let preset;
   if (type === 'cornell') {
-    const sizeKey = document.querySelector('.paper-btn.active').dataset.size;
-    preset = PRESETS.cornell[sizeKey];
+    const sizeKey = document.getElementById('paperSizeSelect').value;
+    preset = PRESETS.cornell[sizeKey] || PRESETS.cornell.a4;
   } else {
     preset = PRESETS[type];
   }
@@ -2038,15 +2086,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Paper size toggle
-  document.querySelectorAll('[data-size]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-size]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const activeType = document.querySelector('.tab.active').dataset.type;
-      if (activeType === 'cornell') loadPreset('cornell');
-      updatePreview();
-    });
+  let previewTimer;
+
+  // Paper size dropdown
+  document.getElementById('paperSizeSelect').addEventListener('change', () => {
+    const val = document.getElementById('paperSizeSelect').value;
+    document.getElementById('customSizeFields').style.display = val === 'custom' ? 'grid' : 'none';
+    const activeType = document.querySelector('.tab.active').dataset.type;
+    if (activeType === 'cornell') loadPreset('cornell');
+    updatePreview();
+  });
+
+  // Custom size fields
+  document.getElementById('customWidth').addEventListener('input', () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(updatePreview, 100);
+  });
+  document.getElementById('customHeight').addEventListener('input', () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(updatePreview, 100);
   });
 
   // Unit toggle
@@ -2064,7 +2122,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Opacity slider — update label + debounced preview
-  let previewTimer;
   const opacitySlider = document.getElementById('opacitySlider');
   const opacityLabel  = document.getElementById('opacityLabel');
   opacitySlider.addEventListener('input', () => {
