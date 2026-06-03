@@ -1088,6 +1088,15 @@ function drawHexGrid(page, config) {
       page.drawLine({ start: { x: cx1, y: cy1 }, end: { x: cx2, y: cy2 }, thickness: lineWeight, color: c, opacity });
     }
 
+    function hexFullyInside(hx, hy, radius, angleOff, minX, maxX, minY, maxY) {
+      for (let k = 0; k < 6; k++) {
+        const vx = hx + radius * Math.cos(angleOff + k * Math.PI / 3);
+        const vy = hy + radius * Math.sin(angleOff + k * Math.PI / 3);
+        if (vx < minX || vx > maxX || vy < minY || vy > maxY) return false;
+      }
+      return true;
+    }
+
     if (orientation === 'flat-top') {
       const colStep = 1.5 * R;
       const rowStep = Math.sqrt(3) * R;
@@ -1095,7 +1104,7 @@ function drawHexGrid(page, config) {
       for (let cx = left - 2 * R; cx <= right + 2 * R; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = bottom - 2 * R + yOffset; cy <= top + 2 * R; cy += rowStep) {
-          if (hideIncomplete && (cx < left || cx > right || cy < bottom || cy > top)) continue;
+          if (hideIncomplete && !hexFullyInside(cx, cy, R, 0, left, right, bottom, top)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(k * Math.PI / 3);
@@ -1112,7 +1121,7 @@ function drawHexGrid(page, config) {
       for (let cy = bottom - 2 * R; cy <= top + 2 * R; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = left - 2 * R + xOffset; cx <= right + 2 * R; cx += colStep) {
-          if (hideIncomplete && (cx < left || cx > right || cy < bottom || cy > top)) continue;
+          if (hideIncomplete && !hexFullyInside(cx, cy, R, Math.PI / 6, left, right, bottom, top)) continue;
           for (let k = 0; k < 6; k++) {
             const vx1 = cx + R * Math.cos(Math.PI / 6 + k * Math.PI / 3);
             const vy1 = cy + R * Math.sin(Math.PI / 6 + k * Math.PI / 3);
@@ -1448,6 +1457,15 @@ function previewHexGrid(ctx, config) {
     ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${opacity})`;
     ctx.lineWidth = lineWeight * scale;
 
+    function hexFullyInsideCanvas(hx, hy, radius, angleOff, minX, maxX, minY, maxY) {
+      for (let k = 0; k < 6; k++) {
+        const vx = hx + radius * Math.cos(angleOff + k * Math.PI / 3);
+        const vy = hy + radius * Math.sin(angleOff + k * Math.PI / 3);
+        if (vx < minX || vx > maxX || vy < minY || vy > maxY) return false;
+      }
+      return true;
+    }
+
     if (orientation === 'flat-top') {
       const colStep = 1.5 * Rc;
       const rowStep = Math.sqrt(3) * Rc;
@@ -1455,7 +1473,7 @@ function previewHexGrid(ctx, config) {
       for (let cx = cLeft - 2 * Rc; cx <= cRight + 2 * Rc; cx += colStep, colIdx++) {
         const yOffset = (colIdx % 2 === 1) ? rowStep / 2 : 0;
         for (let cy = cTop - 2 * Rc + yOffset; cy <= cBottom + 2 * Rc; cy += rowStep) {
-          if (hideIncomplete && (cx < cLeft || cx > cRight || cy < cTop || cy > cBottom)) continue;
+          if (hideIncomplete && !hexFullyInsideCanvas(cx, cy, Rc, 0, cLeft, cRight, cTop, cBottom)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(k * Math.PI / 3);
@@ -1473,7 +1491,7 @@ function previewHexGrid(ctx, config) {
       for (let cy = cTop - 2 * Rc; cy <= cBottom + 2 * Rc; cy += rowStep, rowIdx++) {
         const xOffset = (rowIdx % 2 === 1) ? colStep / 2 : 0;
         for (let cx = cLeft - 2 * Rc + xOffset; cx <= cRight + 2 * Rc; cx += colStep) {
-          if (hideIncomplete && (cx < cLeft || cx > cRight || cy < cTop || cy > cBottom)) continue;
+          if (hideIncomplete && !hexFullyInsideCanvas(cx, cy, Rc, Math.PI / 6, cLeft, cRight, cTop, cBottom)) continue;
           ctx.beginPath();
           for (let k = 0; k < 6; k++) {
             const vx = cx + Rc * Math.cos(Math.PI / 6 + k * Math.PI / 3);
