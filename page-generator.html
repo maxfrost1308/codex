@@ -750,7 +750,7 @@
 
   <!-- Grid color -->
   <div class="field"><label style="margin-bottom: 2px;">Grid Color</label></div>
-  <div class="color-palette">
+  <div class="color-palette" id="gridPalette">
     <button class="swatch active" data-name="Light Gray" data-rgb="0.75,0.75,0.75" style="background:#BFBFBF" title="Light Gray"></button>
     <button class="swatch" data-name="Blue" data-rgb="0.60,0.73,0.89" style="background:#99BAE3" title="Blue"></button>
     <button class="swatch" data-name="Green" data-rgb="0.60,0.80,0.60" style="background:#99CC99" title="Green"></button>
@@ -1816,7 +1816,7 @@ function getConfig() {
   const isLandscape = document.querySelector('[data-orient].active').dataset.orient === 'landscape';
   if (isLandscape) { const tmp = paper.w; paper = { ...paper, w: paper.h, h: tmp }; }
 
-  const activeSwatch = document.querySelector('.swatch.active');
+  const activeSwatch = document.querySelector('#gridPalette .swatch.active');
   const colorRgb = activeSwatch.dataset.rgb.split(',').map(Number);
 
   const opacity = parseFloat(document.getElementById('opacitySlider').value);
@@ -1941,7 +1941,7 @@ function loadPreset(type) {
   if (!preset) return;
 
   // Color swatch
-  document.querySelectorAll('.swatch').forEach((s, i) => {
+  document.querySelectorAll('#gridPalette .swatch').forEach((s, i) => {
     s.classList.toggle('active', i === preset.color);
   });
 
@@ -2379,9 +2379,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Color swatch selection
-  document.querySelectorAll('.swatch').forEach(swatch => {
+  document.querySelectorAll('#gridPalette .swatch').forEach(swatch => {
     swatch.addEventListener('click', () => {
-      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('#gridPalette .swatch').forEach(s => s.classList.remove('active'));
       swatch.classList.add('active');
       updatePreview();
     });
